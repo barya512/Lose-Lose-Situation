@@ -43,16 +43,19 @@ export class MenuScene extends Phaser.Scene {
     title: string,
     call: (u: string, p: string) => Promise<TokenResult>,
   ): void {
+    let cancelled = false;
     const teardown = showAuthForm(
       title,
       async (username, password) => {
         if (!username || !password) return 'enter a username and password';
         try {
           const result = await call(username, password);
+          if (cancelled) return null; // user backed out mid-request — do not navigate
           teardown();
           this.enter(result);
           return null;
         } catch (e) {
+          if (cancelled) return null; // form already dismissed — swallow
           return e instanceof ApiError
             ? (e.status === 409 ? 'username taken'
               : e.status === 401 ? 'wrong username or password'
@@ -60,7 +63,7 @@ export class MenuScene extends Phaser.Scene {
             : 'connection failed';
         }
       },
-      () => { /* cancelled: form torn down, stay on Menu */ },
+      () => { cancelled = true; }, // onCancel: mark so a late success won't navigate
     );
   }
 }
