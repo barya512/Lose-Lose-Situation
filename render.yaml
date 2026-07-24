@@ -1,0 +1,109 @@
+# Render Blueprint (Infrastructure-as-Code) for Lose-Lose Situation.
+#
+# Services:
+#   - lose-lose-api       : FastAPI web service (REST + auth)
+#   - lose-lose-worker    : background worker (RabbitMQ consumer + due-scanner)
+#   - lose-lose-rabbitmq  : private RabbitMQ with a persistent disk
+#   - lose-lose-db        : managed Postgres
+#
+# Inter-service traffic uses Render's private network (.internal hostnames).
+# Validate locally with `make render-validate`.
+
+databases:
+  - name: lose-lose-db
+    databaseName: loselose
+    user: loselose
+    plan: free
+
+envVarGroups:
+  - name: lose-lose-shared
+    envVars:
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ENVIRONMENT
+        value: production
+      - key: MARKET_PROVIDER
+        value: yfinance
+      # Add FINNHUB_API_KEY here if switching providers.
+
+services:
+  # --- RabbitMQ (private service with persistent disk) ---
+  # Consumers read the user/pass back out of this service via fromService/envVarKey
+  # and combine them with the hostport to build the AMQP URL (see settings.py).
+  - type: pserv
+    name: lose-lose-rabbitmq
+    runtime: image
+    image:
+      url: docker.io/library/rabbitmq:3-management
+    plan: starter
+    disk:
+      name: rabbitmq-data
+      mountPath: /var/lib/rabbitmq
+      sizeGB: 1
+    envVars:
+      - key: RABBITMQ_DEFAULT_USER
+        value: loselose
+      - key: RABBITMQ_DEFAULT_PASS
+        generateValue: true
+
+  # --- FastAPI web service ---
+  - type: web
+    name: lose-lose-api
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: .
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - fromGroup: lose-lose-shared
+      - key: DATABASE_URL
+        fromDatabase:
+          name: lose-lose-db
+          property: connectionString
+      # RabbitMQ URL is assembled in settings.py from host + user + password.
+      - key: RABBITMQ_HOST
+        fromService:
+          type: pserv
+          name: lose-lose-rabbitmq
+          property: hostport
+      - key: RABBITMQ_USER
+        fromService:
+          type: pserv
+          name: lose-lose-rabbitmq
+          envVarKey: RABBITMQ_DEFAULT_USER
+      - key: RABBITMQ_PASSWORD
+        fromService:
+          type: pserv
+          name: lose-lose-rabbitmq
+          envVarKey: RABBITMQ_DEFAULT_PASS
+      - key: CORS_ORIGINS
+        sync: false  # set to the deployed frontend origin
+
+  # --- Background worker ---
+  - type: worker
+    name: lose-lose-worker
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile.worker
+    dockerContext: .
+    plan: starter
+    envVars:
+      - fromGroup: lose-lose-shared
+      - key: DATABASE_URL
+        fromDatabase:
+          name: lose-lose-db
+          property: connectionString
+      - key: RABBITMQ_HOST
+        fromService:
+          type: pserv
+          name: lose-lose-rabbitmq
+          property: hostport
+      - key: RABBITMQ_USER
+        fromService:
+          type: pserv
+          name: lose-lose-rabbitmq
+          envVarKey: RABBITMQ_DEFAULT_USER
+      - key: RABBITMQ_PASSWORD
+        fromService:
+          type: pserv
+          name: lose-lose-rabbitmq
+          envVarKey: RABBITMQ_DEFAULT_PASS
