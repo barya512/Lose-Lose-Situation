@@ -156,6 +156,7 @@ export class SlotsScene extends Phaser.Scene {
       roll.remove();
       const fresh = await api.getMe().catch(() => null);
       if (fresh) session.setUser(fresh);
+      if (!this.scene.isActive()) return; // won during the error-path refresh — WinScene took over
       this.toast.setText(e instanceof ApiError ? e.message : 'connection hiccup — try again');
     } finally {
       this.spinning = false;
