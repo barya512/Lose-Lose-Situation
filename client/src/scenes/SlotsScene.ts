@@ -28,6 +28,10 @@ export class SlotsScene extends Phaser.Scene {
   }
 
   create(): void {
+    this.chipButtons = [];
+    this.countButtons = [];
+    this.spinning = false;
+
     const cx = this.scale.width / 2;
     new WalletHud(this, 60, 80);
 

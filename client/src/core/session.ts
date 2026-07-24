@@ -83,6 +83,10 @@ export class Session {
     if (!raw) return;
     try {
       const data = JSON.parse(raw) as Persisted;
+      if (!data.token || !data.user || typeof data.startingBalance !== 'number') {
+        this.storage.removeItem(STORAGE_KEY);
+        return;
+      }
       this._token = data.token;
       this._user = data.user;
       this._startingBalance = data.startingBalance;
