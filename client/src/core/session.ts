@@ -31,7 +31,6 @@ export class Session {
     this._startingBalance = result.user.balance_cents;
     this._wonFired = false;
     this.setUser(result.user);
-    this.persist();
   }
 
   setUser(user: User): void {

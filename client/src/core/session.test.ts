@@ -78,10 +78,34 @@ describe('Session', () => {
     expect(wins).toBe(1);
   });
 
-  it('clear wipes token, user and storage', () => {
+  it('onChange returns a working unsubscribe', () => {
     s.setAuth(tokenResult());
-    s.clear();
-    expect(s.token).toBeNull();
-    expect(s.user).toBeNull();
+    let calls = 0;
+    const unsubscribe = s.onChange(() => { calls += 1; });
+    unsubscribe();
+    s.setUser(user({ balance_cents: 42000 }));
+    expect(calls).toBe(0);
+  });
+
+  it('onWin returns a working unsubscribe', () => {
+    s.setAuth(tokenResult());
+    let calls = 0;
+    const unsubscribe = s.onWin(() => { calls += 1; });
+    unsubscribe();
+    s.setUser(user({ balance_cents: 0, has_won: true }));
+    expect(calls).toBe(0);
+  });
+
+  it('clear wipes token, user and storage', () => {
+    const storage = memoryStorage();
+    const a = new Session(storage);
+    a.setAuth(tokenResult());
+    a.clear();
+    expect(a.token).toBeNull();
+    expect(a.user).toBeNull();
+
+    const b = new Session(storage);
+    expect(b.token).toBeNull();
+    expect(b.user).toBeNull();
   });
 });
