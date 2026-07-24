@@ -23,7 +23,7 @@ The objective is to **lose all money**. Reaching `$0` wins the game.
 - A spin that returns `status: "WON"` (payout > 0) = balance grew = **the
   punishing, bad outcome.**
 
-All feedback is inverted accordingly (see §Slots juice).
+All feedback is inverted accordingly (see [Slots scene UX](#slots-scene-ux)).
 
 ## Non-goals (this slice)
 
@@ -46,7 +46,7 @@ Base URL: `http://localhost:8000/api/v1` (dev). Auth is JWT bearer in the
 | `POST /auth/register` | `{ username, password }` | `201 { access_token, user }` (409 if taken) |
 | `POST /auth/login` | `{ username, password }` | `200 { access_token, user }` (401 bad creds) |
 | `GET /me` | — (auth) | `{ ...user, inventory: [...] }` |
-| `POST /casino/slots/spin` | `{ stake_cents, reels: 3 }` | `{ status, payout_cents, result_detail: { reels: [...], payout_cents, net_cents } }` |
+| `POST /casino/slots/spin` | `{ stake_cents, reels }` (reels = 3 or 5) | `{ status, payout_cents, result_detail: { reels: [...], payout_cents, net_cents } }` |
 
 `user` shape: `{ id, username, is_guest, balance_cents, total_lost_cents,
 bets_count, has_won }`.
@@ -107,7 +107,7 @@ Single private `request(path, { method, body, auth })` that: prefixes
 to a thrown `ApiError { status, message }` (parsed from the FastAPI error body).
 Scenes never call `fetch` directly. Public surface:
 `authGuest()`, `login(u,p)`, `register(u,p)`, `getMe()`,
-`slotsSpin(stakeCents)`. Each returns a typed result.
+`slotsSpin(stakeCents, reels)`. Each returns a typed result.
 
 - **What it does:** turns typed method calls into authenticated HTTP.
 - **Depends on:** `session` (for the token), `VITE_API_BASE`.
@@ -116,13 +116,20 @@ Scenes never call `fetch` directly. Public surface:
 
 ### `core/session.ts`
 Holds `{ token, user }`, persisted to `localStorage` under one key. Exposes
-`setAuth(tokenResult)`, `clear()`, `get token`, `get user`, and an
-`onChange(cb)` subscription fired whenever `user` changes. `applySpin(result)`
-is **not** here — the wallet's new balance comes from re-reading the server's
-authoritative value: after a spin the client calls `getMe()` (or uses the
-balance the spin response implies) and calls `session.setUser(user)`. The HUD
-subscribes to `onChange`. Single source of truth for balance.
+`setAuth(tokenResult)`, `setUser(user)`, `clear()`, `get token`, `get user`,
+and two subscriptions: `onChange(cb)` fired whenever `user` changes, and
+`onWin(cb)` fired the first time the wallet hits the win condition.
+`applySpin(result)` is **not** here — the wallet's new balance comes from
+re-reading the server's authoritative value: after a spin the client calls
+`getMe()` and calls `session.setUser(user)`. The HUD subscribes to `onChange`.
+Single source of truth for balance.
 
+- **Win detection is centralized here, not in any game scene.** `setUser`
+  inspects the authoritative `user` and fires `onWin` when the game is won —
+  keyed off the server's `has_won` flag (equivalently `balance_cents == 0`),
+  fired once per session. This is the single win gate for **every** money
+  module: slots today, market/roulette later all reach `$0` through the same
+  `setUser` → `onWin` path, so no module re-implements the check.
 - Decision: after each spin, refresh the wallet from `getMe()` so the HUD never
   drifts from the server (stake charging + payout happen server-side). Cheap,
   and it keeps the client dumb about economy math.
@@ -162,7 +169,7 @@ Placeholder button (manifest-textured panel + label + hover/press states +
 ```
 BootScene ─bake textures─> TitleScene ─any input─> MenuScene
 MenuScene ──guest / login / register (stores token+user)──> SlotsScene
-SlotsScene ──balance == 0 after a spin──> WinScene
+(any scene) ── session.onWin (balance reached $0) ──> WinScene
 ```
 
 - **TitleScene:** one skippable card stating the inverted premise ("your curse
@@ -176,6 +183,12 @@ SlotsScene ──balance == 0 after a spin──> WinScene
 - **WinScene:** celebratory end card ("you lost everything. you win."). Button
   back to Menu (starts a fresh wallet via a new guest/login).
 
+**WinScene is module-agnostic.** It is not entered from any game scene directly.
+A single win-watcher — registered once at game start on `session.onWin` — starts
+the `WinScene` on top of whatever scene is active. Slots is the only trigger in
+this slice, but market/roulette resolving a wallet to `$0` later go through the
+exact same gate with no change to WinScene or its entry.
+
 ## Slots scene UX
 
 - **WalletHud** pinned top.
@@ -183,16 +196,22 @@ SlotsScene ──balance == 0 after a spin──> WinScene
   the whole wallet in one tap is intentionally not offered). Current stake shown.
   A chip whose value exceeds the current balance is disabled. Selecting a chip
   sets the active stake.
-- **Reels:** 3 reel columns + a **SPIN** button.
+- **Reel-count selector:** a **3 / 5** toggle. The backend `slots/spin` takes a
+  `reels` param and its payout logic (three-of-a-kind / pair) works for either
+  count, so this is purely a stake-per-spin / juice choice for the player. The
+  scene lays out the chosen number of reel columns dynamically (default 3).
+- **Reels:** the selected number of reel columns + a **SPIN** button.
 - **Spin sequence:** disable controls → `playSpin()` + reel spin animation →
-  `slotsSpin(stake)` → land reels on `result_detail.reels` → refresh wallet from
-  `getMe()` → play outcome juice → re-enable controls.
+  `slotsSpin(stake, reelCount)` → land reels on `result_detail.reels` (length
+  matches the requested count) → refresh wallet from `getMe()` → play outcome
+  juice → re-enable controls.
 - **Inverted juice:**
   - `LOST` (payout 0, **good**): `coinBurst` + `shake` + green flash +
     `playLossReward()`; balance tweens **down** (celebrated).
   - `WON` (payout > 0, **bad**): `glitch` red flash + screen dim +
     `playGainPunish()`; balance tweens **up** (punished).
-- After the wallet refresh, if `balance_cents == 0` → `WinScene`.
+- The win transition ($0 → WinScene) is handled centrally by the `session.onWin`
+  watcher after the wallet refresh — the scene does not check for it.
 
 ## Error handling
 
