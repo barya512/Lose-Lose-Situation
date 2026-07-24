@@ -8,6 +8,7 @@ export class Button extends Phaser.GameObjects.Container {
   private bg: Phaser.GameObjects.Image;
   private label: Phaser.GameObjects.Text;
   private enabled = true;
+  private selected = false;
 
   constructor(
     scene: Phaser.Scene, x: number, y: number,
@@ -30,7 +31,7 @@ export class Button extends Phaser.GameObjects.Container {
     if (this.input) this.input.cursor = 'pointer';
 
     this.on('pointerover', () => { if (this.enabled && !this.selected) this.bg.setTint(0x9d7bd8); });
-    this.on('pointerout', () => this.applyTint());
+    this.on('pointerout', () => { this.setScale(1); this.applyTint(); });
     this.on('pointerdown', () => {
       if (!this.enabled) return;
       audio.playClick();
@@ -43,8 +44,6 @@ export class Button extends Phaser.GameObjects.Container {
 
     scene.add.existing(this);
   }
-
-  private selected = false;
 
   private applyTint(): void {
     if (this.selected) this.bg.setTint(0xff3ea5);
