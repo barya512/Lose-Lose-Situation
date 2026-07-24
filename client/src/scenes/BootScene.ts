@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { bakeAll } from '../core/assets';
 
 export class BootScene extends Phaser.Scene {
   constructor() {
@@ -6,12 +7,7 @@ export class BootScene extends Phaser.Scene {
   }
 
   create(): void {
-    this.add
-      .text(this.scale.width / 2, this.scale.height / 2, 'LOSE-LOSE', {
-        fontSize: '48px',
-        color: '#ff3ea5',
-        fontStyle: 'bold',
-      })
-      .setOrigin(0.5);
+    bakeAll(this);
+    this.scene.start('Title');
   }
 }
