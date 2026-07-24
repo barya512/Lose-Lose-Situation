@@ -5,7 +5,7 @@
 | **1. Infra skeleton** | compose, Dockerfiles, `render.yaml`, Makefile, `.env.example`, FastAPI app + `/health` | ✅ done |
 | **2. Config & DB core** | `settings.py`, `game_config.py` (all formulas), models, Alembic `0001`, wallet/economy, JWT + guest auth, `/me` | ✅ done |
 | **3. Mechanics & worker** | yfinance provider, `/market` + RabbitMQ + worker resolution (penalty stack, item drops), casino slots + roulette | ✅ done |
-| **4. Frontend juice** | title card → menu → slots + market (+ roulette stretch), tweens/particles/screen-shake, inverted SFX | 🚧 in progress — engine picked (Phaser 3) |
+| **4. Frontend juice** | title card → menu → slots + market (+ roulette stretch), tweens/particles/screen-shake, inverted SFX | 🚧 in progress — scaffold + slots slice shipped; market next |
 | **5. Playtest & balance** | tune `game_config` live, seed items, optional Polls/Sports stretch | ◻ pending |
 
 ## Verified so far

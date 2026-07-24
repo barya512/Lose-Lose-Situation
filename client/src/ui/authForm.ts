@@ -1,0 +1,84 @@
+// Minimal DOM overlay for username/password entry over the Phaser canvas.
+// onSubmit resolves to an error string to display in-modal (form stays open),
+// or null on success (onSubmit is responsible for tearing the form down).
+// Returns a teardown function that removes the overlay.
+export function showAuthForm(
+  title: string,
+  onSubmit: (username: string, password: string) => Promise<string | null>,
+  onCancel: () => void,
+): () => void {
+  const wrap = document.createElement('div');
+  wrap.style.cssText =
+    'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;' +
+    'background:rgba(10,4,16,0.85);z-index:10;font-family:sans-serif;';
+
+  const card = document.createElement('div');
+  card.style.cssText = 'display:flex;flex-direction:column;gap:12px;min-width:280px;';
+
+  const heading = document.createElement('div');
+  heading.textContent = title;
+  heading.style.cssText = 'color:#ff3ea5;font-size:24px;font-weight:bold;text-align:center;';
+
+  const userInput = document.createElement('input');
+  userInput.placeholder = 'username';
+  const passInput = document.createElement('input');
+  passInput.placeholder = 'password';
+  passInput.type = 'password';
+  for (const el of [userInput, passInput]) {
+    el.style.cssText = 'padding:12px;font-size:16px;border-radius:8px;border:none;';
+  }
+
+  const submit = document.createElement('button');
+  submit.textContent = 'GO';
+  submit.style.cssText =
+    'padding:12px;font-size:18px;font-weight:bold;border:none;border-radius:8px;' +
+    'background:#3a2456;color:#fff;cursor:pointer;';
+
+  const cancel = document.createElement('button');
+  cancel.textContent = 'CANCEL';
+  cancel.style.cssText =
+    'padding:8px;font-size:14px;border:none;border-radius:8px;background:transparent;' +
+    'color:#b197fc;cursor:pointer;';
+
+  const error = document.createElement('div');
+  error.style.cssText = 'color:#ff6b6b;font-size:14px;min-height:18px;text-align:center;';
+
+  const teardown = () => {
+    document.removeEventListener('keydown', onKey);
+    wrap.remove();
+  };
+
+  let busy = false;
+  const fire = async (): Promise<void> => {
+    if (busy) return;
+    busy = true;
+    submit.disabled = true;
+    error.textContent = '';
+    const msg = await onSubmit(userInput.value.trim(), passInput.value);
+    // Non-null => an error to show; keep the form open and re-enable.
+    // Null => success; onSubmit already tore the form down.
+    if (msg !== null) {
+      error.textContent = msg;
+      submit.disabled = false;
+      busy = false;
+    }
+  };
+
+  const dismiss = () => { teardown(); onCancel(); };
+
+  function onKey(e: KeyboardEvent): void {
+    if (e.key === 'Enter') void fire();
+    else if (e.key === 'Escape') dismiss();
+  }
+
+  submit.addEventListener('click', () => void fire());
+  cancel.addEventListener('click', dismiss);
+  document.addEventListener('keydown', onKey);
+
+  card.append(heading, userInput, passInput, submit, cancel, error);
+  wrap.append(card);
+  document.body.append(wrap);
+  userInput.focus();
+
+  return teardown;
+}
