@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.game_config import ALLOWED_TIMEFRAMES_S, Direction
 
@@ -22,6 +22,13 @@ class PlaceMarketBet(BaseModel):
     direction: Direction
     stake_cents: int = Field(gt=0)
     timeframe_s: int = Field(description=f"one of {ALLOWED_TIMEFRAMES_S}")
+
+    @field_validator("timeframe_s")
+    @classmethod
+    def _validate_timeframe(cls, v: int) -> int:
+        if v not in ALLOWED_TIMEFRAMES_S:
+            raise ValueError(f"timeframe must be one of {ALLOWED_TIMEFRAMES_S}")
+        return v
 
 
 class MarketBetOut(BaseModel):
