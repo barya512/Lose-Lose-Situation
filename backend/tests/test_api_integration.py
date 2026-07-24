@@ -99,3 +99,82 @@ async def test_roulette_rejects_oversized_specific_bet(client: AsyncClient):
 async def test_auth_required_for_me(client: AsyncClient):
     resp = await client.get("/api/v1/me")
     assert resp.status_code == 401  # no bearer token -> unauthenticated
+
+
+class _FakeProvider:
+    """Deterministic price source so market tests never touch the network."""
+
+    async def get_price(self, symbol: str) -> float:
+        return 100.0
+
+
+def _stub_market(monkeypatch):
+    """Replace the live price provider + RabbitMQ publish for placing bets."""
+
+    async def _noop_publish(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr("app.modules.market.service.get_provider", lambda: _FakeProvider())
+    monkeypatch.setattr("app.modules.market.service.publish", _noop_publish)
+
+
+async def _guest_auth(client: AsyncClient) -> dict[str, str]:
+    token = (await client.post("/api/v1/auth/guest")).json()["access_token"]
+    return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.mark.asyncio
+async def test_market_one_open_bet_per_symbol(client: AsyncClient, monkeypatch):
+    _stub_market(monkeypatch)
+    auth = await _guest_auth(client)
+    body = {"ticker": "BTC-USD", "direction": "DOWN", "stake_cents": 50_00, "timeframe_s": 60}
+
+    first = await client.post("/api/v1/market/bets", json=body, headers=auth)
+    assert first.status_code == 201
+
+    # Second bet on the SAME symbol while the first is PENDING -> rejected.
+    dup = await client.post("/api/v1/market/bets", json=body, headers=auth)
+    assert dup.status_code == 400
+
+    # A DIFFERENT symbol is fine — the rule is per-symbol, not per-user.
+    other = await client.post(
+        "/api/v1/market/bets", json={**body, "ticker": "ETH-USD"}, headers=auth
+    )
+    assert other.status_code == 201
+
+
+@pytest.mark.asyncio
+async def test_market_pending_bets_listing(client: AsyncClient, monkeypatch):
+    _stub_market(monkeypatch)
+    auth = await _guest_auth(client)
+    body = {"ticker": "BTC-USD", "direction": "DOWN", "stake_cents": 50_00, "timeframe_s": 60}
+    await client.post("/api/v1/market/bets", json=body, headers=auth)
+    await client.post("/api/v1/market/bets", json={**body, "ticker": "ETH-USD"}, headers=auth)
+
+    pending = await client.get("/api/v1/market/bets?status=pending", headers=auth)
+    assert pending.status_code == 200
+    data = pending.json()
+    assert {b["ticker"] for b in data} == {"BTC-USD", "ETH-USD"}
+    assert all(b["status"] == "PENDING" for b in data)
+
+    # No filter -> all of the user's market bets.
+    all_bets = await client.get("/api/v1/market/bets", headers=auth)
+    assert len(all_bets.json()) == 2
+
+    # A bogus status is a clean 400, not a 500.
+    bad = await client.get("/api/v1/market/bets?status=bogus", headers=auth)
+    assert bad.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_market_pending_bets_are_scoped_to_caller(client: AsyncClient, monkeypatch):
+    _stub_market(monkeypatch)
+    body = {"ticker": "BTC-USD", "direction": "DOWN", "stake_cents": 50_00, "timeframe_s": 60}
+
+    auth_a = await _guest_auth(client)
+    await client.post("/api/v1/market/bets", json=body, headers=auth_a)
+
+    # A second guest sees none of the first guest's bets.
+    auth_b = await _guest_auth(client)
+    resp = await client.get("/api/v1/market/bets", headers=auth_b)
+    assert resp.json() == []

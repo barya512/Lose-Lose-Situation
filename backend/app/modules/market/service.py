@@ -82,6 +82,20 @@ async def place_market_bet(
     if not is_valid_stake(stake_cents, user.balance_cents):
         raise BetValidationError("stake outside allowed range for current balance")
 
+    # One open bet per symbol: reject if this user already has a PENDING bet on
+    # this ticker (checked before the price fetch so we don't waste a provider call).
+    existing = await session.scalar(
+        select(Bet.id)
+        .where(
+            Bet.user_id == user.id,
+            Bet.ticker == ticker,
+            Bet.status == BetStatus.PENDING.value,
+        )
+        .limit(1)
+    )
+    if existing is not None:
+        raise BetValidationError(f"you already have an open bet on {ticker}")
+
     start_price = await get_provider().get_price(ticker)
     crowd = await _crowd_same_direction_ratio(session, ticker, direction)
     resolve_at = datetime.now(timezone.utc) + timedelta(seconds=timeframe_s)
@@ -108,6 +122,25 @@ async def place_market_bet(
         {"bet_id": str(bet.id), "resolve_at": resolve_at.isoformat()},
     )
     return bet
+
+
+async def list_market_bets(
+    session: AsyncSession, user: User, *, status: str | None = None
+) -> list[Bet]:
+    """The user's market bets, optionally filtered by status (e.g. PENDING).
+
+    Ordered by ``resolve_at`` so the client sees soonest-to-resolve first. This is
+    the server-side source of truth the client rehydrates its poll manager from.
+    """
+    stmt = select(Bet).where(
+        Bet.user_id == user.id,
+        Bet.module == BetModule.MARKET.value,
+    )
+    if status is not None:
+        stmt = stmt.where(Bet.status == status)
+    stmt = stmt.order_by(Bet.resolve_at)
+    rows = await session.scalars(stmt)
+    return list(rows)
 
 
 async def _maybe_drop_item(

@@ -48,7 +48,17 @@ Place a timed UP/DOWN bet. Validated against `max_bet` and allowed timeframes
 → 201 { "id": "...", "ticker": "BTC-USD", "direction": "DOWN", "stake_cents": 5000,
         "start_price": 61234.5, "resolve_at": "...", "status": "PENDING", ... }
 ```
-Errors: 400 (validation), 503 (market data unavailable).
+Errors: 400 (validation — includes **one open bet per symbol**: a second bet on a
+ticker you already have `PENDING` is rejected), 503 (market data unavailable).
+
+### `GET /market/bets`  *(auth)*
+The caller's market bets, newest-resolving first. Optional `?status=PENDING`
+filter (case-insensitive; invalid value → 400). This is the client's source of
+truth for open bets — the background poll manager rehydrates from it after a
+reload. Returns a list of the same shape as `GET /market/bets/{bet_id}`.
+```json
+→ 200 [ { "id": "...", "ticker": "BTC-USD", "status": "PENDING", "resolve_at": "...", ... } ]
+```
 
 ### `GET /market/bets/{bet_id}`  *(auth)*
 Poll until `status` flips to `WON`/`LOST`. `result_detail` carries the full

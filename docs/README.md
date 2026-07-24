@@ -34,5 +34,6 @@ make test                    # run the backend test suite
 - **Backend (Phases 1–3):** FastAPI monolith + RabbitMQ worker, JWT + guest auth,
   the Bet365 market module (real yfinance prices, async worker resolution, dynamic
   penalty stack, item drops) and the Casino module (roulette + slots, instant).
-  24 tests passing (formulas, economy simulation, HTTP integration).
-- **Frontend (Phase 4):** engine deferred — see [adr/0003](adr/0003-frontend-engine.md).
+  27 tests passing (formulas, economy simulation, HTTP integration).
+- **Frontend (Phase 4):** in progress — **Phaser 3, HTML5-only, hosted backend**;
+  full plan in [adr/0003](adr/0003-frontend-engine.md).
