@@ -1,15 +1,21 @@
 import Phaser from 'phaser';
+import cherryIcon from '../../../assets/CHERRY.png';
+import lemonIcon from '../../../assets/LEMON.png';
+import bellIcon from '../../../assets/BELL.png';
+import starIcon from '../../../assets/STAR.png';
+import sevenIcon from '../../../assets/SEVEN.png';
+import skullIcon from '../../../assets/SKULL.png';
 
 export const SLOT_SYMBOLS = ['CHERRY', 'LEMON', 'BELL', 'STAR', 'SEVEN', 'SKULL'] as const;
 export type SlotSymbol = (typeof SLOT_SYMBOLS)[number];
 
-const SYMBOL_STYLE: Record<SlotSymbol, { color: number; glyph: string }> = {
-  CHERRY: { color: 0xff4d6d, glyph: 'CH' },
-  LEMON: { color: 0xffe066, glyph: 'LE' },
-  BELL: { color: 0xffa94d, glyph: 'BE' },
-  STAR: { color: 0x74c0fc, glyph: 'ST' },
-  SEVEN: { color: 0xb197fc, glyph: '7' },
-  SKULL: { color: 0xff3ea5, glyph: 'SK' },
+const SYMBOL_STYLE: Record<SlotSymbol, { color: number; icon: string }> = {
+  CHERRY: { color: 0xff4d6d, icon: cherryIcon },
+  LEMON: { color: 0xffe066, icon: lemonIcon },
+  BELL: { color: 0xffa94d, icon: bellIcon },
+  STAR: { color: 0x74c0fc, icon: starIcon },
+  SEVEN: { color: 0xb197fc, icon: sevenIcon },
+  SKULL: { color: 0xff3ea5, icon: skullIcon },
 };
 
 export const TEX = {
@@ -23,8 +29,18 @@ export function symbolTextureKey(s: SlotSymbol): string {
   return `slot.${s.toLowerCase()}`;
 }
 
-export function symbolStyle(s: SlotSymbol): { color: number; glyph: string } {
+export function symbolIconKey(s: SlotSymbol): string {
+  return `slot.icon.${s.toLowerCase()}`;
+}
+
+export function symbolStyle(s: SlotSymbol): { color: number; icon: string } {
   return SYMBOL_STYLE[s];
+}
+
+export function loadSymbolIcons(scene: Phaser.Scene): void {
+  for (const s of SLOT_SYMBOLS) {
+    scene.load.image(symbolIconKey(s), SYMBOL_STYLE[s].icon);
+  }
 }
 
 function bakeRoundedTile(

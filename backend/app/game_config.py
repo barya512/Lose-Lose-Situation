@@ -423,24 +423,31 @@ class SlotSymbol(str, Enum):
 
 # Weights: higher = appears more often. Skull is rare so the big (bad) win is rare.
 SLOT_REEL_WEIGHTS: dict[SlotSymbol, float] = {
-    SlotSymbol.CHERRY: 30.0,
-    SlotSymbol.LEMON: 26.0,
+    SlotSymbol.CHERRY: 25.0,
+    SlotSymbol.LEMON: 25.0,
     SlotSymbol.BELL: 20.0,
-    SlotSymbol.STAR: 14.0,
-    SlotSymbol.SEVEN: 8.0,
-    SlotSymbol.SKULL: 2.0,
+    SlotSymbol.STAR: 20.0,
+    SlotSymbol.SEVEN: 5.0,
+    SlotSymbol.SKULL: 5.0,
 }
 
 # Payout multiplier for three-of-a-kind (applied to the stake). Winning grows balance.
 SLOT_THREE_OF_A_KIND_PAYOUT: dict[SlotSymbol, float] = {
-    SlotSymbol.CHERRY: 3.0,
-    SlotSymbol.LEMON: 4.0,
-    SlotSymbol.BELL: 6.0,
-    SlotSymbol.STAR: 10.0,
-    SlotSymbol.SEVEN: 20.0,
-    SlotSymbol.SKULL: 50.0,
+    SlotSymbol.CHERRY: 2.0,
+    SlotSymbol.LEMON: 2.0,
+    SlotSymbol.BELL: 4.0,
+    SlotSymbol.STAR: 4.0,
+    SlotSymbol.SEVEN: 10.0,
+    SlotSymbol.SKULL: 10.0,
 }
 SLOT_TWO_OF_A_KIND_PAYOUT: float = 1.5  # any pair returns a small multiple
+
+SLOT_MIN_REELS = 3
+SLOT_MAX_REELS = 5
+
+# On 5 reels a pair is nearly guaranteed by the birthday paradox, so the
+# two-of-a-kind payout is dropped there to keep it a genuine loss.
+SLOT_TWO_OF_A_KIND_DISABLED_REEL_COUNTS: frozenset[int] = frozenset({5})
 
 
 def spin_slots(reels: int = 3, rng: random.Random | None = None) -> list[SlotSymbol]:
@@ -453,7 +460,8 @@ def spin_slots(reels: int = 3, rng: random.Random | None = None) -> list[SlotSym
 def slots_payout_cents(reels: list[SlotSymbol], stake_cents: int) -> int:
     """Gross payout for a spin (0 = the desired losing outcome).
 
-    Three of a kind pays the symbol multiple; any pair pays the small multiple.
+    Three of a kind pays the symbol multiple; any pair pays the small multiple
+    (except on reel counts in ``SLOT_TWO_OF_A_KIND_DISABLED_REEL_COUNTS``).
     """
     counts: dict[SlotSymbol, int] = {}
     for s in reels:
@@ -462,6 +470,27 @@ def slots_payout_cents(reels: list[SlotSymbol], stake_cents: int) -> int:
     if top >= 3:
         symbol = next(s for s, c in counts.items() if c >= 3)
         return int(stake_cents * SLOT_THREE_OF_A_KIND_PAYOUT[symbol])
-    if top == 2:
+    if top == 2 and len(reels) not in SLOT_TWO_OF_A_KIND_DISABLED_REEL_COUNTS:
         return int(stake_cents * SLOT_TWO_OF_A_KIND_PAYOUT)
     return 0
+
+
+@dataclass(frozen=True)
+class SlotSymbolInfo:
+    """One row of the slots paytable, for describing the game to the player."""
+
+    symbol: SlotSymbol
+    weight: float
+    three_of_a_kind_payout: float
+
+
+def slots_paytable() -> list[SlotSymbolInfo]:
+    """Full paytable, symbol-by-symbol, in enum declaration order."""
+    return [
+        SlotSymbolInfo(
+            symbol=symbol,
+            weight=SLOT_REEL_WEIGHTS[symbol],
+            three_of_a_kind_payout=SLOT_THREE_OF_A_KIND_PAYOUT[symbol],
+        )
+        for symbol in SlotSymbol
+    ]

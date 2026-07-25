@@ -1,5 +1,5 @@
 import { session } from './session';
-import type { SlotSpinResult, TokenResult, User } from './types';
+import type { SlotInfo, SlotSpinResult, TokenResult, User } from './types';
 
 const BASE = import.meta.env.VITE_API_BASE;
 
@@ -57,4 +57,5 @@ export const api = {
       auth: true,
       body: { stake_cents: stakeCents, reels },
     }),
+  slotsInfo: () => request<SlotInfo>('/casino/slots/info'),
 };

@@ -1,11 +1,12 @@
 import Phaser from 'phaser';
 import { WalletHud } from '../ui/WalletHud';
 import { Button } from '../ui/Button';
+import { SlotInfoPanel } from '../ui/SlotInfoPanel';
 import { api, ApiError } from '../core/api';
 import { session } from '../core/session';
 import { audio } from '../core/audio';
 import { juice } from '../core/juice';
-import { SLOT_SYMBOLS, symbolStyle, symbolTextureKey, type SlotSymbol } from '../core/assets';
+import { SLOT_SYMBOLS, symbolIconKey, symbolTextureKey, type SlotSymbol } from '../core/assets';
 
 const STAKE_CHIPS = [100, 1000, 5000, 10000]; // cents: $1 / $10 / $50 / $100
 const REEL_SIZE = 128;
@@ -17,11 +18,12 @@ export class SlotsScene extends Phaser.Scene {
   private spinning = false;
 
   private reelSprites: Phaser.GameObjects.Image[] = [];
-  private reelLabels: Phaser.GameObjects.Text[] = [];
+  private reelIcons: Phaser.GameObjects.Image[] = [];
   private chipButtons: { cents: number; btn: Button }[] = [];
   private countButtons: { count: number; btn: Button }[] = [];
   private spinButton!: Button;
   private toast!: Phaser.GameObjects.Text;
+  private infoPanel!: SlotInfoPanel;
 
   constructor() {
     super('Slots');
@@ -58,15 +60,20 @@ export class SlotsScene extends Phaser.Scene {
     this.spinButton = new Button(this, cx, 650, 'SPIN', () => this.spin(), { width: 260, height: 72 });
     this.toast = this.add.text(cx, 700, '', { fontSize: '20px', color: '#ff6b6b' }).setOrigin(0.5);
 
+    this.infoPanel = new SlotInfoPanel(this, this.scale.width - 140, 400, 600);
+    api.slotsInfo()
+      .then((info) => this.infoPanel.setInfo(info))
+      .catch(() => { /* paytable is informational-only; ignore fetch failures */ });
+
     this.pickStake(this.stakeCents);
     this.pickCount(this.reelCount);
   }
 
   private buildReels(): void {
     this.reelSprites.forEach((s) => s.destroy());
-    this.reelLabels.forEach((l) => l.destroy());
+    this.reelIcons.forEach((icon) => icon.destroy());
     this.reelSprites = [];
-    this.reelLabels = [];
+    this.reelIcons = [];
 
     const cx = this.scale.width / 2;
     const total = this.reelCount * REEL_SIZE + (this.reelCount - 1) * REEL_GAP;
@@ -77,17 +84,15 @@ export class SlotsScene extends Phaser.Scene {
       const x = startX + i * (REEL_SIZE + REEL_GAP);
       const sym = SLOT_SYMBOLS[i % SLOT_SYMBOLS.length];
       const img = this.add.image(x, y, symbolTextureKey(sym));
-      const label = this.add
-        .text(x, y, symbolStyle(sym).glyph, { fontSize: '44px', color: '#1a0a2e', fontStyle: 'bold' })
-        .setOrigin(0.5);
+      const icon = this.add.image(x, y, symbolIconKey(sym));
       this.reelSprites.push(img);
-      this.reelLabels.push(label);
+      this.reelIcons.push(icon);
     }
   }
 
   private setReel(i: number, sym: SlotSymbol): void {
     this.reelSprites[i].setTexture(symbolTextureKey(sym));
-    this.reelLabels[i].setText(symbolStyle(sym).glyph);
+    this.reelIcons[i].setTexture(symbolIconKey(sym));
   }
 
   private pickStake(cents: number): void {
@@ -104,6 +109,7 @@ export class SlotsScene extends Phaser.Scene {
     this.reelCount = count;
     this.countButtons.forEach(({ count: c, btn }) => btn.setSelected(c === count));
     this.buildReels();
+    this.infoPanel?.setReelCount(count);
   }
 
   private setControls(enabled: boolean): void {
