@@ -30,10 +30,14 @@ services:
     volumes:
       - rabbitdata:/var/lib/rabbitmq
     healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      # check_port_connectivity verifies the AMQP listener (5672) is actually
+      # accepting connections — `ping` only proves the Erlang node is up, which
+      # can report healthy before 5672 is bound and refuse the worker's connect.
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_connectivity"]
       interval: 10s
       timeout: 5s
       retries: 10
+      start_period: 20s
 
   api:
     build:
@@ -47,6 +51,7 @@ services:
       PORT: "8000"
     ports:
       - "8000:8000"
+    restart: unless-stopped
     depends_on:
       db:
         condition: service_healthy
@@ -62,6 +67,7 @@ services:
       RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
       JWT_SECRET: dev-insecure-change-me
       ENVIRONMENT: local
+    restart: unless-stopped
     depends_on:
       db:
         condition: service_healthy

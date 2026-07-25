@@ -22,7 +22,7 @@ from datetime import datetime, timezone
 import aio_pika
 from sqlalchemy import select
 
-from app.broker.rabbit import get_connection
+from app.broker.rabbit import connect_with_retry
 from app.broker.topology import (
     QUEUE_BETS_RESOLVE,
     QUEUE_ITEMS_TICK,
@@ -95,7 +95,8 @@ async def due_scanner() -> None:
 
 
 async def main() -> None:
-    connection = await get_connection()
+    # Ride out the startup race / transient blips instead of crashing the worker.
+    connection = await connect_with_retry()
     channel = await connection.channel()
     await channel.set_qos(prefetch_count=PREFETCH)
     await declare_topology(channel)

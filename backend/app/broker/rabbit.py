@@ -7,12 +7,17 @@ Render redeploys.
 
 from __future__ import annotations
 
+import asyncio
 import json
+import logging
 
 import aio_pika
+from aio_pika.exceptions import AMQPConnectionError
 
 from app.broker.topology import EXCHANGE_NAME, declare_topology
 from app.settings import settings
+
+log = logging.getLogger(__name__)
 
 _connection: aio_pika.abc.AbstractRobustConnection | None = None
 
@@ -22,6 +27,31 @@ async def get_connection() -> aio_pika.abc.AbstractRobustConnection:
     if _connection is None or _connection.is_closed:
         _connection = await aio_pika.connect_robust(settings.rabbitmq_url)
     return _connection
+
+
+async def connect_with_retry(
+    *, retries: int = 30, base_delay: float = 2.0, max_delay: float = 30.0
+) -> aio_pika.abc.AbstractRobustConnection:
+    """Connect, tolerating a broker that isn't accepting connections yet.
+
+    ``connect_robust`` only auto-reconnects *after* a first successful connect, so
+    the initial attempt can still raise during a startup race (the container is
+    "healthy" before the AMQP listener is up) or a transient blip. Retry with a
+    linear backoff and re-raise only once ``retries`` attempts are exhausted.
+    """
+    for attempt in range(1, retries + 1):
+        try:
+            return await get_connection()
+        except (AMQPConnectionError, OSError) as exc:
+            if attempt >= retries:
+                raise
+            delay = min(base_delay * attempt, max_delay)
+            log.warning(
+                "RabbitMQ unavailable (attempt %d/%d): %s; retrying in %.1fs",
+                attempt, retries, exc, delay,
+            )
+            await asyncio.sleep(delay)
+    raise AssertionError("unreachable")  # pragma: no cover
 
 
 async def publish(routing_key: str, payload: dict) -> None:
