@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -10,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.deps import get_current_user
 from app.db.base import get_session
 from app.db.models import Bet, BetStatus, User
-from app.game_config import CURATED_TICKERS
+from app.game_config import CURATED_TICKERS, is_market_open
 from app.modules.market.providers import ProviderError, get_provider
 from app.modules.market.service import (
     BetValidationError,
@@ -22,19 +23,31 @@ from app.schemas.market import MarketBetOut, PlaceMarketBet, TickerOut
 router = APIRouter(prefix="/market", tags=["market"])
 
 
+async def _price_or_none(provider, symbol: str) -> float | None:
+    try:
+        return await provider.get_price(symbol)
+    except Exception:  # noqa: BLE001 — never fail the whole list on one bad ticker
+        return None
+
+
 @router.get("/tickers", response_model=list[TickerOut])
 async def tickers() -> list[TickerOut]:
     provider = get_provider()
-    out: list[TickerOut] = []
-    for spec in CURATED_TICKERS:
-        try:
-            price = await provider.get_price(spec.symbol)
-        except Exception:  # noqa: BLE001 — never fail the whole list on one bad ticker
-            price = None
-        out.append(
-            TickerOut(symbol=spec.symbol, name=spec.name, kind=spec.kind.value, last_price=price)
+    # Fetched concurrently — sequentially awaiting ~15 yfinance round-trips made
+    # this endpoint take 4s+ cold, which the client polls on a 10s cadence.
+    prices = await asyncio.gather(
+        *(_price_or_none(provider, spec.symbol) for spec in CURATED_TICKERS)
+    )
+    return [
+        TickerOut(
+            symbol=spec.symbol,
+            name=spec.name,
+            kind=spec.kind.value,
+            last_price=price,
+            is_open=is_market_open(spec),
         )
-    return out
+        for spec, price in zip(CURATED_TICKERS, prices)
+    ]
 
 
 @router.post("/bets", response_model=MarketBetOut, status_code=status.HTTP_201_CREATED)
