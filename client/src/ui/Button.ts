@@ -24,9 +24,10 @@ export class Button extends Phaser.GameObjects.Container {
       .setOrigin(0.5);
     this.add([this.bg, this.label]);
 
-    // Container needs an explicit, centred hit area (children are centred at 0,0).
+    // Container input normalizes the hit point by displayOrigin (half-size)
+    // before the rect test, so the hit area must be top-left based, not centred.
     this.setSize(w, h);
-    const hit = new Phaser.Geom.Rectangle(-w / 2, -h / 2, w, h);
+    const hit = new Phaser.Geom.Rectangle(0, 0, w, h);
     this.setInteractive(hit, Phaser.Geom.Rectangle.Contains);
     if (this.input) this.input.cursor = 'pointer';
 

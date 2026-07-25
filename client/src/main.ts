@@ -19,6 +19,10 @@ const game = new Phaser.Game({
     width: GAME_WIDTH,
     height: GAME_HEIGHT,
   },
+  // Only process input events that target the canvas. Without this, Phaser's
+  // window-level mouse listeners hit-test DOM-overlay clicks (e.g. the auth
+  // form) against the buttons behind them — the auth click-through leak.
+  input: { windowEvents: false },
   scene: [BootScene, TitleScene, MenuScene, SlotsScene, WinScene],
 });
 

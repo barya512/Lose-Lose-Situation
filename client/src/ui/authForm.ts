@@ -11,6 +11,11 @@ export function showAuthForm(
   wrap.style.cssText =
     'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;' +
     'background:rgba(10,4,16,0.85);z-index:10;font-family:sans-serif;';
+  // The overlay covers the whole viewport over a live Phaser scene. Phaser
+  // attaches its mouse listeners to `window`, so trap the modal's own mouse
+  // events here to stop them bubbling through to the buttons behind the form.
+  wrap.addEventListener('mousedown', (e) => e.stopPropagation());
+  wrap.addEventListener('mouseup', (e) => e.stopPropagation());
 
   const card = document.createElement('div');
   card.style.cssText = 'display:flex;flex-direction:column;gap:12px;min-width:280px;';
