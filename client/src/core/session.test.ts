@@ -78,6 +78,35 @@ describe('Session', () => {
     expect(wins).toBe(1);
   });
 
+  it('applyBeerResult merges the new balance and fires onChange', () => {
+    s.setAuth(tokenResult({ balance_cents: 100000 }));
+    let seen = -1;
+    s.onChange((u) => { seen = u.balance_cents; });
+    s.applyBeerResult({ cost_cents: 100, balance_cents: 99900,
+      total_lost_cents: 100, has_won: false });
+    expect(s.user?.balance_cents).toBe(99900);
+    expect(s.user?.total_lost_cents).toBe(100);
+    expect(seen).toBe(99900);
+  });
+
+  it('applyBeerResult preserves unrelated user fields', () => {
+    s.setAuth(tokenResult({ username: 'ava', is_guest: false, bets_count: 7 }));
+    s.applyBeerResult({ cost_cents: 100, balance_cents: 50000,
+      total_lost_cents: 200, has_won: false });
+    expect(s.user?.username).toBe('ava');
+    expect(s.user?.is_guest).toBe(false);
+    expect(s.user?.bets_count).toBe(7);
+  });
+
+  it('applyBeerResult fires onWin when the beer drains the wallet to $0', () => {
+    s.setAuth(tokenResult({ balance_cents: 100 }));
+    let wins = 0;
+    s.onWin(() => { wins += 1; });
+    s.applyBeerResult({ cost_cents: 100, balance_cents: 0,
+      total_lost_cents: 100000, has_won: true });
+    expect(wins).toBe(1);
+  });
+
   it('onChange returns a working unsubscribe', () => {
     s.setAuth(tokenResult());
     let calls = 0;

@@ -32,6 +32,11 @@ function tone(freq: number, durationMs: number, type: OscillatorType = 'sine', g
 export const audio = {
   playClick(): void { tone(440, 60, 'square', 0.05); },
   playSpin(): void { tone(220, 120, 'sawtooth', 0.05); },
+  // Beer: a short wet "gulp" — a quick downward blip.
+  playBeer(): void {
+    tone(320, 90, 'sine', 0.07);
+    setTimeout(() => tone(180, 120, 'sine', 0.07), 70);
+  },
   // GOOD outcome (money lost): rising triumphant arpeggio.
   playLossReward(): void {
     tone(523, 90, 'triangle');

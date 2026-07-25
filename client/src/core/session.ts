@@ -1,4 +1,4 @@
-import type { TokenResult, User } from './types';
+import type { BeerResult, TokenResult, User } from './types';
 
 const STORAGE_KEY = 'lose-lose.session';
 
@@ -42,6 +42,22 @@ export class Session {
       this._wonFired = true;
       this.winCbs.forEach((cb) => cb(user));
     }
+  }
+
+  /**
+   * Fold an authoritative BeerResult into the current user. The server already
+   * computed the new balance/total-lost/win-flag, so we merge them onto the
+   * existing user rather than re-fetching — reusing setUser so the HUD update
+   * and the $0 win-gate fire through the single source of truth.
+   */
+  applyBeerResult(result: BeerResult): void {
+    if (!this._user) return;
+    this.setUser({
+      ...this._user,
+      balance_cents: result.balance_cents,
+      total_lost_cents: result.total_lost_cents,
+      has_won: result.has_won,
+    });
   }
 
   clear(): void {

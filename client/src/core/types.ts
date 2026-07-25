@@ -25,6 +25,13 @@ export interface SlotSpinResult {
   };
 }
 
+export interface BeerResult {
+  cost_cents: number;
+  balance_cents: number;
+  total_lost_cents: number;
+  has_won: boolean;
+}
+
 export interface SlotSymbolInfo {
   symbol: string;
   weight: number;

@@ -27,7 +27,7 @@ export class MenuScene extends Phaser.Scene {
 
   private enter(result: TokenResult): void {
     session.setAuth(result);
-    this.scene.start('Slots');
+    this.scene.start('Poison');
   }
 
   private async guest(): Promise<void> {

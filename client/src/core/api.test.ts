@@ -70,6 +70,26 @@ describe('api', () => {
     expect(res.two_of_a_kind_disabled_reel_counts).toEqual([5]);
   });
 
+  it('POSTs /beer/buy with the bearer token and no body', async () => {
+    session.setAuth({ access_token: 'abc', token_type: 'bearer',
+      user: { id: 'u', username: null, is_guest: true, balance_cents: 100000,
+              total_lost_cents: 0, bets_count: 0, has_won: false } });
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({ cost_cents: 100, balance_cents: 99900,
+        total_lost_cents: 100, has_won: false }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await api.buyBeer();
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe(`${BASE}/beer/buy`);
+    expect(init.method).toBe('POST');
+    expect(init.headers.Authorization).toBe('Bearer abc');
+    expect(init.body).toBeUndefined();
+    expect(res.balance_cents).toBe(99900);
+  });
+
   it('throws ApiError with status and parsed detail on non-2xx', async () => {
     // mockImplementation (not mockResolvedValue) so each call gets a fresh
     // Response — a Response body can only be read once, and this test

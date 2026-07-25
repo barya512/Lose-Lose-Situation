@@ -2,6 +2,8 @@ import Phaser from 'phaser';
 import { BootScene } from './scenes/BootScene';
 import { TitleScene } from './scenes/TitleScene';
 import { MenuScene } from './scenes/MenuScene';
+import { PoisonScene } from './scenes/PoisonScene';
+import { CasinoScene } from './scenes/CasinoScene';
 import { SlotsScene } from './scenes/SlotsScene';
 import { WinScene } from './scenes/WinScene';
 import { session } from './core/session';
@@ -23,7 +25,7 @@ const game = new Phaser.Game({
   // window-level mouse listeners hit-test DOM-overlay clicks (e.g. the auth
   // form) against the buttons behind them — the auth click-through leak.
   input: { windowEvents: false },
-  scene: [BootScene, TitleScene, MenuScene, SlotsScene, WinScene],
+  scene: [BootScene, TitleScene, MenuScene, PoisonScene, CasinoScene, SlotsScene, WinScene],
 });
 
 // Module-agnostic win gate: whenever the wallet hits $0 (from any game module),
