@@ -6,7 +6,7 @@ import uuid
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.game_config import RouletteBetType
+from app.game_config import SLOT_MAX_REELS, SLOT_MIN_REELS, RouletteBetType
 
 
 class RouletteBet(BaseModel):
@@ -20,7 +20,23 @@ class RouletteBet(BaseModel):
 
 class SlotSpin(BaseModel):
     stake_cents: int = Field(gt=0)
-    reels: int = Field(default=3, ge=3, le=5)
+    reels: int = Field(default=SLOT_MIN_REELS, ge=SLOT_MIN_REELS, le=SLOT_MAX_REELS)
+
+
+class SlotSymbolOut(BaseModel):
+    symbol: str
+    weight: float
+    three_of_a_kind_payout: float
+
+
+class SlotInfo(BaseModel):
+    """Describes slots payouts for display — the client's paytable/rules panel."""
+
+    min_reels: int
+    max_reels: int
+    symbols: list[SlotSymbolOut]
+    two_of_a_kind_payout: float
+    two_of_a_kind_disabled_reel_counts: list[int]
 
 
 class CasinoResult(BaseModel):

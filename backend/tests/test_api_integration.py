@@ -83,6 +83,22 @@ async def test_slot_spin_moves_wallet(client: AsyncClient):
 
 
 @pytest.mark.asyncio
+async def test_slots_info_is_public_and_matches_config(client: AsyncClient):
+    from app import game_config as gc
+
+    resp = await client.get("/api/v1/casino/slots/info")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["min_reels"] == gc.SLOT_MIN_REELS
+    assert body["max_reels"] == gc.SLOT_MAX_REELS
+    assert body["two_of_a_kind_payout"] == gc.SLOT_TWO_OF_A_KIND_PAYOUT
+    assert body["two_of_a_kind_disabled_reel_counts"] == sorted(
+        gc.SLOT_TWO_OF_A_KIND_DISABLED_REEL_COUNTS
+    )
+    assert {s["symbol"] for s in body["symbols"]} == {s.value for s in gc.SlotSymbol}
+
+
+@pytest.mark.asyncio
 async def test_roulette_rejects_oversized_specific_bet(client: AsyncClient):
     token = (await client.post("/api/v1/auth/guest")).json()["access_token"]
     auth = {"Authorization": f"Bearer {token}"}

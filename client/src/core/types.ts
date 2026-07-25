@@ -24,3 +24,17 @@ export interface SlotSpinResult {
     net_cents: number;
   };
 }
+
+export interface SlotSymbolInfo {
+  symbol: string;
+  weight: number;
+  three_of_a_kind_payout: number;
+}
+
+export interface SlotInfo {
+  min_reels: number;
+  max_reels: number;
+  symbols: SlotSymbolInfo[];
+  two_of_a_kind_payout: number;
+  two_of_a_kind_disabled_reel_counts: number[];
+}

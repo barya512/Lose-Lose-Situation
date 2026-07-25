@@ -52,6 +52,24 @@ describe('api', () => {
     expect(JSON.parse(init.body)).toEqual({ stake_cents: 1000, reels: 3 });
   });
 
+  it('GETs /casino/slots/info with no auth header', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        min_reels: 3, max_reels: 5,
+        symbols: [{ symbol: 'CHERRY', weight: 25, three_of_a_kind_payout: 2 }],
+        two_of_a_kind_payout: 1.5, two_of_a_kind_disabled_reel_counts: [5],
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await api.slotsInfo();
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe(`${BASE}/casino/slots/info`);
+    expect(init.headers.Authorization).toBeUndefined();
+    expect(res.two_of_a_kind_disabled_reel_counts).toEqual([5]);
+  });
+
   it('throws ApiError with status and parsed detail on non-2xx', async () => {
     // mockImplementation (not mockResolvedValue) so each call gets a fresh
     // Response — a Response body can only be read once, and this test

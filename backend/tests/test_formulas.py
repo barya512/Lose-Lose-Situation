@@ -146,6 +146,31 @@ def test_slots_no_match_pays_nothing():
     assert gc.slots_payout_cents(reels, 100_00) == 0
 
 
+def test_slots_pair_pays_on_three_reels():
+    reels = [SlotSymbol.CHERRY, SlotSymbol.CHERRY, SlotSymbol.BELL]
+    payout = gc.slots_payout_cents(reels, 100_00)
+    assert payout == int(100_00 * gc.SLOT_TWO_OF_A_KIND_PAYOUT)
+
+
+def test_slots_pair_pays_nothing_on_five_reels():
+    reels = [
+        SlotSymbol.CHERRY,
+        SlotSymbol.CHERRY,
+        SlotSymbol.BELL,
+        SlotSymbol.STAR,
+        SlotSymbol.LEMON,
+    ]
+    assert gc.slots_payout_cents(reels, 100_00) == 0
+
+
+def test_slots_paytable_matches_config():
+    rows = {row.symbol: row for row in gc.slots_paytable()}
+    assert set(rows) == set(SlotSymbol)
+    for symbol, row in rows.items():
+        assert row.weight == gc.SLOT_REEL_WEIGHTS[symbol]
+        assert row.three_of_a_kind_payout == gc.SLOT_THREE_OF_A_KIND_PAYOUT[symbol]
+
+
 def test_item_drop_chance_bounds():
     assert 0.0 <= gc.item_drop_chance(0, 1_000_00) <= 1.0
     assert gc.item_drop_chance(1_000_00, 1_000_00) >= gc.item_drop_chance(1_00, 1_000_00)
