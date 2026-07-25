@@ -59,6 +59,9 @@ class Economy(BaseSettings):
     STARTING_BALANCE_CENTS: int = 1_000_00  # $X — money each new player starts with
     WIN_TARGET_CENTS: int = 0  # reaching this = you WIN the game (lose all money)
 
+    # --- Beer (consumable: costs money, does nothing — a pure, thematic drain) ---
+    BEER_COST_CENTS: int = 1_00  # $1 — price to buy/drink one beer
+
     # --- Bet sizing ---
     MAX_BET_FRACTION: float = 0.25  # $Y — a single bet may stake at most 25% of balance
     MIN_BET_CENTS: int = 1_00  # smallest allowed stake ($1)

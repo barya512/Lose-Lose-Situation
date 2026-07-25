@@ -110,6 +110,27 @@ async def test_slot_spin_moves_wallet(client: AsyncClient):
 
 
 @pytest.mark.asyncio
+async def test_buy_beer_moves_wallet(client: AsyncClient):
+    token = (await client.post("/api/v1/auth/guest")).json()["access_token"]
+    auth = {"Authorization": f"Bearer {token}"}
+
+    me_before = (await client.get("/api/v1/me", headers=auth)).json()
+    before = me_before["balance_cents"]
+    lost_before = me_before["total_lost_cents"]
+
+    resp = await client.post("/api/v1/beer/buy", headers=auth)
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["cost_cents"] == econ.BEER_COST_CENTS
+
+    me_after = (await client.get("/api/v1/me", headers=auth)).json()
+    # One beer removes exactly its price from the wallet...
+    assert me_after["balance_cents"] == before - econ.BEER_COST_CENTS
+    # ...and that loss is recorded in the running total.
+    assert me_after["total_lost_cents"] == lost_before + econ.BEER_COST_CENTS
+
+
+@pytest.mark.asyncio
 async def test_roulette_rejects_oversized_specific_bet(client: AsyncClient):
     token = (await client.post("/api/v1/auth/guest")).json()["access_token"]
     auth = {"Authorization": f"Bearer {token}"}
