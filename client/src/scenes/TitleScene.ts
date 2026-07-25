@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { audio } from '../core/audio';
 
 export class TitleScene extends Phaser.Scene {
   constructor() {
@@ -24,7 +25,11 @@ export class TitleScene extends Phaser.Scene {
     }).setOrigin(0.5);
     this.tweens.add({ targets: prompt, alpha: 0.2, duration: 700, yoyo: true, repeat: -1 });
 
-    const go = () => this.scene.start('Menu');
+    const go = () => {
+      // First user gesture — safe point to start audio under browser autoplay policy.
+      audio.playTheme(this);
+      this.scene.start('Menu');
+    };
     this.input.once('pointerdown', go);
     this.input.keyboard?.once('keydown', go);
   }

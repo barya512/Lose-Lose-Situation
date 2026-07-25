@@ -5,6 +5,8 @@ import bellIcon from '../../../assets/BELL.png';
 import starIcon from '../../../assets/STAR.png';
 import sevenIcon from '../../../assets/SEVEN.png';
 import skullIcon from '../../../assets/SKULL.png';
+import themeMusic from '../../../assets/sounds/Loose Loose Loop.mp3';
+import winMusic from '../../../assets/sounds/Cursed Sandman.mp3';
 
 export const SLOT_SYMBOLS = ['CHERRY', 'LEMON', 'BELL', 'STAR', 'SEVEN', 'SKULL'] as const;
 export type SlotSymbol = (typeof SLOT_SYMBOLS)[number];
@@ -42,6 +44,13 @@ export const TEX = {
   reactionLoss: 'slot.reaction.loss',
 } as const;
 
+export const MUSIC = {
+  // Main theme, loops for the duration of the session.
+  theme: 'music.theme',
+  // Stinger for the player's winning screen.
+  win: 'music.win',
+} as const;
+
 /** Corner inset for the {@link TEX.slotFrame} nine-slice (px). */
 export const SLOT_FRAME_INSET = 24;
 
@@ -61,6 +70,11 @@ export function loadSymbolIcons(scene: Phaser.Scene): void {
   for (const s of SLOT_SYMBOLS) {
     scene.load.image(symbolIconKey(s), SYMBOL_STYLE[s].icon);
   }
+}
+
+export function loadMusic(scene: Phaser.Scene): void {
+  scene.load.audio(MUSIC.theme, themeMusic);
+  scene.load.audio(MUSIC.win, winMusic);
 }
 
 function bakeRoundedTile(

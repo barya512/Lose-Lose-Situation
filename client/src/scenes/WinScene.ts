@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { Button } from '../ui/Button';
 import { session } from '../core/session';
+import { audio } from '../core/audio';
 
 export class WinScene extends Phaser.Scene {
   constructor() {
@@ -10,6 +11,7 @@ export class WinScene extends Phaser.Scene {
   create(): void {
     const cx = this.scale.width / 2;
     this.cameras.main.setBackgroundColor('#0a0410');
+    audio.playWinTheme(this);
 
     this.add.text(cx, 220, 'YOU LOST EVERYTHING.', {
       fontSize: '52px', color: '#3ddc84', fontStyle: 'bold',
