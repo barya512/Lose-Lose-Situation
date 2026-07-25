@@ -152,6 +152,13 @@ def test_slots_pair_pays_on_three_reels():
     assert payout == int(100_00 * gc.SLOT_TWO_OF_A_KIND_PAYOUT)
 
 
+def test_slots_ineligible_pair_pays_nothing_on_three_reels():
+    # BELL is not in SLOT_PAIR_ELIGIBLE_SYMBOLS — a bare pair is a near-miss loss.
+    reels = [SlotSymbol.BELL, SlotSymbol.BELL, SlotSymbol.CHERRY]
+    assert gc.slots_payout_cents(reels, 100_00) == 0
+    assert SlotSymbol.BELL not in gc.SLOT_PAIR_ELIGIBLE_SYMBOLS
+
+
 def test_slots_pair_pays_nothing_on_five_reels():
     reels = [
         SlotSymbol.CHERRY,

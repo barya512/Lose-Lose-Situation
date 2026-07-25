@@ -70,8 +70,12 @@ Payouts: `ECON_ROULETTE_PAYOUT_COLOR` (2.0), `_DOZEN` (3.0), `_GREEN` (36.0),
 
 Reel symbol weights (`SLOT_REEL_WEIGHTS`) and three-of-a-kind payouts
 (`SLOT_THREE_OF_A_KIND_PAYOUT`) are edited in code. `SLOT_TWO_OF_A_KIND_PAYOUT`
-(1.5) pays any pair. `SKULL` is the rare jackpot (pays the most = worst for the
-player).
+(1.5) only pays for symbols in `SLOT_PAIR_ELIGIBLE_SYMBOLS` (CHERRY/LEMON) —
+a pair of anything else is a near-miss loss, not a payout. This keeps the
+punish-rate (any-payout spin) around 30% on both 3 and 5 reels; letting any
+symbol pair pay would put a floor of ~44% on 3 reels no matter how the
+weights are tuned (birthday paradox with only 6 symbols). `SKULL`/`SEVEN` are
+the rare jackpot tier (pays the most = worst for the player).
 
 ## Balancing harness
 
