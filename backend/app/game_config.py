@@ -19,7 +19,9 @@ from __future__ import annotations
 
 import random
 from dataclasses import dataclass
+from datetime import datetime, time, timezone
 from enum import Enum
+from zoneinfo import ZoneInfo
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -109,20 +111,73 @@ econ = Economy()
 
 
 @dataclass(frozen=True)
+class MarketHours:
+    """Regular trading session for one exchange, in its own local time.
+
+    No holiday calendar (good enough for jam pacing) — just weekday + local
+    clock-time gating. ``None`` on a ``TickerSpec`` means "always open" (crypto).
+    """
+
+    tz: str  # IANA zone, e.g. "America/New_York"
+    open_time: time
+    close_time: time
+
+
+# Reused across tickers that share an exchange.
+US_MARKET_HOURS = MarketHours("America/New_York", time(9, 30), time(16, 0))
+EURONEXT_AMSTERDAM_HOURS = MarketHours("Europe/Amsterdam", time(9, 0), time(17, 30))
+LONDON_STOCK_EXCHANGE_HOURS = MarketHours("Europe/London", time(8, 0), time(16, 30))
+ASX_HOURS = MarketHours("Australia/Sydney", time(10, 0), time(16, 0))
+HONG_KONG_HOURS = MarketHours("Asia/Hong_Kong", time(9, 30), time(16, 0))
+
+
+@dataclass(frozen=True)
 class TickerSpec:
     symbol: str  # yfinance symbol
     name: str
     kind: TickerKind
+    market_hours: MarketHours | None = None  # None = always open (crypto)
 
 
 CURATED_TICKERS: tuple[TickerSpec, ...] = (
-    TickerSpec("AAPL", "Apple", TickerKind.STOCK),
-    TickerSpec("TSLA", "Tesla", TickerKind.STOCK),
+    # --- "Magnificent 7" ---
+    TickerSpec("AAPL", "Apple", TickerKind.STOCK, US_MARKET_HOURS),
+    TickerSpec("MSFT", "Microsoft", TickerKind.STOCK, US_MARKET_HOURS),
+    TickerSpec("GOOGL", "Alphabet", TickerKind.STOCK, US_MARKET_HOURS),
+    TickerSpec("AMZN", "Amazon", TickerKind.STOCK, US_MARKET_HOURS),
+    TickerSpec("NVDA", "Nvidia", TickerKind.STOCK, US_MARKET_HOURS),
+    TickerSpec("META", "Meta Platforms", TickerKind.STOCK, US_MARKET_HOURS),
+    TickerSpec("TSLA", "Tesla", TickerKind.STOCK, US_MARKET_HOURS),
+    # --- Index ETFs ---
+    TickerSpec("SPY", "S&P 500 ETF", TickerKind.STOCK, US_MARKET_HOURS),
+    TickerSpec("QQQ", "Nasdaq-100 ETF", TickerKind.STOCK, US_MARKET_HOURS),
+    # --- International blue chips (each gated to its home exchange's hours) ---
+    TickerSpec("ASML.AS", "ASML Holding", TickerKind.STOCK, EURONEXT_AMSTERDAM_HOURS),
+    TickerSpec("AZN.L", "AstraZeneca", TickerKind.STOCK, LONDON_STOCK_EXCHANGE_HOURS),
+    TickerSpec("BHP.AX", "BHP Group", TickerKind.STOCK, ASX_HOURS),
+    TickerSpec("9988.HK", "Alibaba Group", TickerKind.STOCK, HONG_KONG_HOURS),
+    # --- Crypto: always open ---
     TickerSpec("BTC-USD", "Bitcoin", TickerKind.CRYPTO),
     TickerSpec("ETH-USD", "Ethereum", TickerKind.CRYPTO),
 )
 
 TICKER_BY_SYMBOL = {t.symbol: t for t in CURATED_TICKERS}
+
+
+def is_market_open(spec: TickerSpec, now: datetime | None = None) -> bool:
+    """Is this ticker's home exchange currently in its regular trading session?
+
+    Crypto (``market_hours is None``) is always open. Everything else is gated
+    to Mon-Fri, local-exchange-time regular hours.
+    """
+    hours = spec.market_hours
+    if hours is None:
+        return True
+    moment = now or datetime.now(timezone.utc)
+    local = moment.astimezone(ZoneInfo(hours.tz))
+    if local.weekday() >= 5:  # Saturday, Sunday
+        return False
+    return hours.open_time <= local.time() < hours.close_time
 
 # Allowed bet timeframes in seconds (kept short for jam-paced iteration).
 ALLOWED_TIMEFRAMES_S: tuple[int, ...] = (60, 300, 3600)

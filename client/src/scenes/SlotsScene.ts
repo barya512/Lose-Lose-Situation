@@ -40,6 +40,8 @@ export class SlotsScene extends Phaser.Scene {
     this.add.text(cx, 60, 'SLOTS', { fontSize: '36px', color: '#ff3ea5', fontStyle: 'bold' })
       .setOrigin(0.5);
 
+    new Button(this, this.scale.width - 110, 40, 'MARKET', () => this.scene.start('Market'), { width: 180, height: 52 });
+
     this.buildReels();
 
     // Stake chips.
@@ -51,9 +53,9 @@ export class SlotsScene extends Phaser.Scene {
     });
 
     // Reel-count toggle.
-    this.add.text(cx, 540, 'REELS', { fontSize: '18px', color: '#b197fc' }).setOrigin(0.5);
+    this.add.text(cx, 525, 'REELS', { fontSize: '18px', color: '#b197fc' }).setOrigin(0.5);
     [3, 5].forEach((count, i) => {
-      const btn = new Button(this, cx - 90 + i * 180, 585, String(count), () => this.pickCount(count), { width: 150 });
+      const btn = new Button(this, cx - 90 + i * 180, 570, String(count), () => this.pickCount(count), { width: 150 });
       this.countButtons.push({ count, btn });
     });
 
