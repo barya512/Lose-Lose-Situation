@@ -479,14 +479,18 @@ class SlotSymbol(str, Enum):
     SKULL = "SKULL"  # the "jackpot" — pays the most (worst, since you gain money)
 
 
-# Weights: higher = appears more often. Skull is rare so the big (bad) win is rare.
+# Weights: higher = appears more often. SEVEN/SKULL sit at 9% (not 5%) so the
+# jackpot 3-of-a-kind actually shows up in a normal session (~1-in-686 spins)
+# instead of being a practically-invisible 1-in-4,000 event. The 8pts came out
+# of BELL/STAR (3-of-a-kind-only contributors) rather than CHERRY/LEMON, so the
+# overall punish-rate (see SLOT_PAIR_ELIGIBLE_SYMBOLS below) barely moves.
 SLOT_REEL_WEIGHTS: dict[SlotSymbol, float] = {
     SlotSymbol.CHERRY: 25.0,
     SlotSymbol.LEMON: 25.0,
-    SlotSymbol.BELL: 20.0,
-    SlotSymbol.STAR: 20.0,
-    SlotSymbol.SEVEN: 5.0,
-    SlotSymbol.SKULL: 5.0,
+    SlotSymbol.BELL: 16.0,
+    SlotSymbol.STAR: 16.0,
+    SlotSymbol.SEVEN: 9.0,
+    SlotSymbol.SKULL: 9.0,
 }
 
 # Payout multiplier for three-of-a-kind (applied to the stake). Winning grows balance.
@@ -498,13 +502,24 @@ SLOT_THREE_OF_A_KIND_PAYOUT: dict[SlotSymbol, float] = {
     SlotSymbol.SEVEN: 10.0,
     SlotSymbol.SKULL: 10.0,
 }
-SLOT_TWO_OF_A_KIND_PAYOUT: float = 1.5  # any pair returns a small multiple
+SLOT_TWO_OF_A_KIND_PAYOUT: float = 1.5  # eligible pair returns a small multiple
+
+# Only these symbols pay on a bare pair. With 6 symbols and 3 reels, ANY pair
+# paying would put the punish-rate (any-payout spin) at a birthday-paradox
+# floor of ~44% no matter how weights are tuned — too high a bar for "losing
+# is the reward" to be the dominant feel. Restricting pairs to the two
+# cheapest symbols keeps the mid/rare tiers (BELL/STAR/SEVEN/SKULL) as
+# genuine near-misses when they only pair up, and lands the punish-rate at
+# ~30% (see docs/formula-cheatsheet.md).
+SLOT_PAIR_ELIGIBLE_SYMBOLS: frozenset[SlotSymbol] = frozenset(
+    {SlotSymbol.CHERRY, SlotSymbol.LEMON}
+)
 
 SLOT_MIN_REELS = 3
 SLOT_MAX_REELS = 5
 
-# On 5 reels a pair is nearly guaranteed by the birthday paradox, so the
-# two-of-a-kind payout is dropped there to keep it a genuine loss.
+# On 5 reels even an eligible pair is nearly guaranteed by the birthday
+# paradox, so all pair payouts are dropped there to keep it a genuine loss.
 SLOT_TWO_OF_A_KIND_DISABLED_REEL_COUNTS: frozenset[int] = frozenset({5})
 
 
@@ -518,8 +533,10 @@ def spin_slots(reels: int = 3, rng: random.Random | None = None) -> list[SlotSym
 def slots_payout_cents(reels: list[SlotSymbol], stake_cents: int) -> int:
     """Gross payout for a spin (0 = the desired losing outcome).
 
-    Three of a kind pays the symbol multiple; any pair pays the small multiple
-    (except on reel counts in ``SLOT_TWO_OF_A_KIND_DISABLED_REEL_COUNTS``).
+    Three of a kind always pays the symbol multiple. A bare pair only pays if
+    the paired symbol is in ``SLOT_PAIR_ELIGIBLE_SYMBOLS`` (and the reel count
+    isn't in ``SLOT_TWO_OF_A_KIND_DISABLED_REEL_COUNTS``) — a pair of anything
+    else is a near-miss that resolves as a loss.
     """
     counts: dict[SlotSymbol, int] = {}
     for s in reels:
@@ -529,7 +546,9 @@ def slots_payout_cents(reels: list[SlotSymbol], stake_cents: int) -> int:
         symbol = next(s for s, c in counts.items() if c >= 3)
         return int(stake_cents * SLOT_THREE_OF_A_KIND_PAYOUT[symbol])
     if top == 2 and len(reels) not in SLOT_TWO_OF_A_KIND_DISABLED_REEL_COUNTS:
-        return int(stake_cents * SLOT_TWO_OF_A_KIND_PAYOUT)
+        symbol = next(s for s, c in counts.items() if c == 2)
+        if symbol in SLOT_PAIR_ELIGIBLE_SYMBOLS:
+            return int(stake_cents * SLOT_TWO_OF_A_KIND_PAYOUT)
     return 0
 
 
