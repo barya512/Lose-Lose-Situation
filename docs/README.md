@@ -9,6 +9,7 @@ reaching **$0 wins the game**.
 | Doc | What's inside |
 |-----|---------------|
 | [architecture.md](architecture.md) | Service topology, RabbitMQ queues, worker loop |
+| [client-setup.md](client-setup.md) | ★ Run the Phaser client locally, build for itch, shut down |
 | [render-deploy.md](render-deploy.md) | Deploying the Blueprint to Render.com |
 | [db-schema.md](db-schema.md) | Tables, columns, relationships |
 | [api-reference.md](api-reference.md) | Every endpoint with example payloads |
