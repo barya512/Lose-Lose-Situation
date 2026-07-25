@@ -62,6 +62,33 @@ async def test_guest_starts_with_starting_balance(client: AsyncClient):
 
 
 @pytest.mark.asyncio
+async def test_register_then_login_round_trip(client: AsyncClient):
+    creds = {"username": "gambler", "password": "dont-lose-this"}
+
+    reg = await client.post("/api/v1/auth/register", json=creds)
+    assert reg.status_code == 201, reg.text  # password hashing must not blow up
+    reg_body = reg.json()
+    assert reg_body["user"]["username"] == "gambler"
+    assert reg_body["user"]["is_guest"] is False
+    assert reg_body["access_token"]
+
+    # Registering the same username again is a conflict, not a 500.
+    dup = await client.post("/api/v1/auth/register", json=creds)
+    assert dup.status_code == 409
+
+    # The stored hash verifies on login...
+    ok = await client.post("/api/v1/auth/login", json=creds)
+    assert ok.status_code == 200, ok.text
+    assert ok.json()["user"]["username"] == "gambler"
+
+    # ...and a wrong password is rejected, not accepted or crashed.
+    bad = await client.post(
+        "/api/v1/auth/login", json={**creds, "password": "wrong-password"}
+    )
+    assert bad.status_code == 401
+
+
+@pytest.mark.asyncio
 async def test_slot_spin_moves_wallet(client: AsyncClient):
     token = (await client.post("/api/v1/auth/guest")).json()["access_token"]
     auth = {"Authorization": f"Bearer {token}"}
