@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { bakeAll, loadSymbolIcons } from '../core/assets';
+import { bakeAll, loadMusic, loadSymbolIcons } from '../core/assets';
 
 export class BootScene extends Phaser.Scene {
   constructor() {
@@ -8,6 +8,7 @@ export class BootScene extends Phaser.Scene {
 
   preload(): void {
     loadSymbolIcons(this);
+    loadMusic(this);
   }
 
   create(): void {

@@ -1,7 +1,14 @@
 // Placeholder audio: short WebAudio beeps. Inverted mapping lives here —
 // losing money is rewarding, gaining money is punishing. Real SFX will replace
 // these tone(...) calls without changing call sites.
+import type Phaser from 'phaser';
+import { MUSIC } from './assets';
+
 let ctx: AudioContext | null = null;
+
+// Music lives on Phaser's game-global sound manager, so a track started from
+// one scene keeps playing across scene transitions until explicitly stopped.
+let musicTrack: Phaser.Sound.BaseSound | null = null;
 
 function ac(): AudioContext | null {
   if (typeof window === 'undefined') return null;
@@ -47,5 +54,20 @@ export const audio = {
   playGainPunish(): void {
     tone(200, 160, 'sawtooth', 0.09);
     setTimeout(() => tone(150, 220, 'sawtooth', 0.09), 120);
+  },
+  // Main theme — starts on first user interaction and loops for the session.
+  playTheme(scene: Phaser.Scene): void {
+    if (musicTrack?.isPlaying) return;
+    musicTrack?.destroy();
+    musicTrack = scene.sound.add(MUSIC.theme, { loop: true, volume: 0.4 });
+    musicTrack.play();
+  },
+  stopTheme(): void {
+    musicTrack?.stop();
+  },
+  // Player's winning screen stinger — replaces the theme.
+  playWinTheme(scene: Phaser.Scene): void {
+    audio.stopTheme();
+    scene.sound.add(MUSIC.win, { volume: 0.6 }).play();
   },
 };
