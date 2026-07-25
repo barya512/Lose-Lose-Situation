@@ -45,3 +45,30 @@ export interface SlotInfo {
   two_of_a_kind_payout: number;
   two_of_a_kind_disabled_reel_counts: number[];
 }
+
+export type MarketDirection = 'UP' | 'DOWN';
+
+export interface MarketTicker {
+  symbol: string;
+  name: string;
+  kind: string;
+  last_price: number | null;
+  is_open: boolean;
+}
+
+export type MarketBetStatus = 'PENDING' | 'WON' | 'LOST';
+
+export interface MarketBet {
+  id: string;
+  ticker: string | null;
+  direction: string | null;
+  stake_cents: number;
+  timeframe_s: number | null;
+  start_price: number | null;
+  end_price: number | null;
+  resolve_at: string | null;
+  status: MarketBetStatus;
+  penalty_cents: number;
+  payout_cents: number;
+  result_detail: Record<string, unknown> | null;
+}

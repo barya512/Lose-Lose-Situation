@@ -25,7 +25,7 @@ export class PoisonScene extends Phaser.Scene {
     const y = 380;
     new BeerButton(this, cx - 340, y, () => this.buyBeer());
     new Orb(this, cx, y, TEX.orbMarket, 'MARKET',
-      () => this.comingSoon('the market'), { enabled: false });
+      () => this.scene.start('Market'));
     new Orb(this, cx + 340, y, TEX.orbCasino, 'CASINO',
       () => this.scene.start('Casino'));
 
@@ -35,10 +35,6 @@ export class PoisonScene extends Phaser.Scene {
       session.clear();
       this.scene.start('Menu');
     }, { width: 180, height: 56 });
-  }
-
-  private comingSoon(what: string): void {
-    this.toast.setText(`${what} isn't open yet`);
   }
 
   private async buyBeer(): Promise<void> {

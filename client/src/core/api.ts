@@ -1,5 +1,14 @@
 import { session } from './session';
-import type { BeerResult, SlotInfo, SlotSpinResult, TokenResult, User } from './types';
+import type {
+  BeerResult,
+  MarketBet,
+  MarketDirection,
+  MarketTicker,
+  SlotInfo,
+  SlotSpinResult,
+  TokenResult,
+  User,
+} from './types';
 
 const BASE = import.meta.env.VITE_API_BASE;
 
@@ -59,4 +68,13 @@ export const api = {
     }),
   slotsInfo: () => request<SlotInfo>('/casino/slots/info'),
   buyBeer: () => request<BeerResult>('/beer/buy', { method: 'POST', auth: true }),
+  marketTickers: () => request<MarketTicker[]>('/market/tickers'),
+  marketPlaceBet: (ticker: string, direction: MarketDirection, stakeCents: number, timeframeS: number) =>
+    request<MarketBet>('/market/bets', {
+      method: 'POST',
+      auth: true,
+      body: { ticker, direction, stake_cents: stakeCents, timeframe_s: timeframeS },
+    }),
+  marketBets: (status?: MarketBet['status']) =>
+    request<MarketBet[]>(`/market/bets${status ? `?status=${status}` : ''}`, { auth: true }),
 };

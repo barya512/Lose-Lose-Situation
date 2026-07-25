@@ -15,6 +15,7 @@ class TickerOut(BaseModel):
     name: str
     kind: str
     last_price: float | None = None
+    is_open: bool
 
 
 class PlaceMarketBet(BaseModel):

@@ -27,6 +27,7 @@ from app.game_config import (
     ALLOWED_TIMEFRAMES_S,
     TICKER_BY_SYMBOL,
     Direction,
+    is_market_open,
     is_valid_stake,
     resolve_market_bet,
     roll_item_drop,
@@ -77,6 +78,8 @@ async def place_market_bet(
     spec = TICKER_BY_SYMBOL.get(ticker)
     if spec is None:
         raise BetValidationError(f"unknown ticker '{ticker}'")
+    if not is_market_open(spec):
+        raise BetValidationError(f"{spec.symbol} market is closed")
     if timeframe_s not in ALLOWED_TIMEFRAMES_S:
         raise BetValidationError(f"timeframe must be one of {ALLOWED_TIMEFRAMES_S}")
     if not is_valid_stake(stake_cents, user.balance_cents):
