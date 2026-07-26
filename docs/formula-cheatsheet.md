@@ -20,7 +20,14 @@ Render env group (prod), or in your shell.
 | Env var | Default | Meaning |
 |---------|---------|---------|
 | `ECON_MAX_BET_FRACTION` | `0.25` | A single bet may stake at most this fraction of balance ($Y). |
-| `ECON_MIN_BET_CENTS` | `100` ($1) | Smallest allowed stake. |
+| `ECON_MIN_BET_CENTS` | `100` ($1) | Smallest allowed stake — except at **last call** (below). |
+
+**Last call.** A wallet holding *less* than `ECON_MIN_BET_CENTS` but more than $0
+(say `$0.43`) would be softlocked: too poor to bet, not yet at the $0 win. Below
+the minimum, the whole remaining balance becomes the **only** legal stake — one
+all-in play, no cent-by-cent grinding. Beer follows the same rule: the last one
+costs whatever is left rather than the list price. At $0 the run is already won
+and the normal minimum applies again.
 
 ## Market bet outcome
 

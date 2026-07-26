@@ -1,6 +1,6 @@
 [project]
 name = "lose-lose-situation"
-version = "0.2.0"
+version = "0.2.1"
 description = "A game where the objective is to lose all your money. Backend API + async worker."
 requires-python = ">=3.12"
 dependencies = [

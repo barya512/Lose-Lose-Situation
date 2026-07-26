@@ -24,12 +24,30 @@ def test_max_bet_never_below_minimum():
     assert gc.max_bet_cents(1) == econ.MIN_BET_CENTS
 
 
+def test_min_bet_is_the_whole_balance_below_the_minimum():
+    # "Last call": a wallet under the minimum stake would otherwise be softlocked
+    # (too poor to bet, not yet at the $0 win), so the remainder IS the stake.
+    assert gc.min_bet_cents(43) == 43
+
+
+def test_min_bet_is_the_configured_minimum_when_affordable():
+    assert gc.min_bet_cents(1_000_00) == econ.MIN_BET_CENTS
+
+
+def test_min_bet_offers_no_free_play_at_zero():
+    # $0 is the win condition, not a last call — the normal minimum applies and
+    # the caller's balance check then rejects the bet.
+    assert gc.min_bet_cents(0) == econ.MIN_BET_CENTS
+
+
 @pytest.mark.parametrize(
     "stake,balance,ok",
     [
         (100_00, 1_000_00, True),  # 10% of balance, >= min
         (1, 1_000_00, False),  # below min
         (300_00, 1_000_00, False),  # 30% > 25% cap
+        (43, 43, True),  # last call: the whole sub-minimum remainder
+        (20, 43, False),  # ...but only the WHOLE remainder — no grinding
     ],
 )
 def test_is_valid_stake(stake, balance, ok):

@@ -147,6 +147,64 @@ async def test_buy_beer_moves_wallet(client: AsyncClient):
 
 
 @pytest.mark.asyncio
+async def test_last_beer_costs_the_remainder_and_wins_the_run(
+    client: AsyncClient, monkeypatch
+):
+    """The last beer is priced at whatever is left, so it always finishes a run."""
+    monkeypatch.setattr(econ, "STARTING_BALANCE_CENTS", 43)
+    auth = await _guest_auth(client)
+
+    resp = await client.post("/api/v1/beer/buy", headers=auth)
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["cost_cents"] == 43  # not the $1 list price
+
+    me = (await client.get("/api/v1/me", headers=auth)).json()
+    assert me["balance_cents"] == 0
+    assert me["has_won"] is True
+    assert me["total_lost_cents"] == 43
+
+
+@pytest.mark.asyncio
+async def test_casino_last_call_stakes_the_whole_remainder(client: AsyncClient, monkeypatch):
+    """A sub-$1 wallet must still be able to gamble its way to $0.
+
+    Below MIN_BET_CENTS the remainder is the only legal stake, so both machines
+    take it — and a partial stake is still refused.
+    """
+    monkeypatch.setattr(econ, "STARTING_BALANCE_CENTS", 43)
+    auth = await _guest_auth(client)
+
+    partial = await client.post(
+        "/api/v1/casino/slots/spin", json={"stake_cents": 20}, headers=auth
+    )
+    assert partial.status_code == 400  # no cent-by-cent grinding
+
+    spin = await client.post(
+        "/api/v1/casino/slots/spin", json={"stake_cents": 43}, headers=auth
+    )
+    assert spin.status_code == 200, spin.text
+
+    me = (await client.get("/api/v1/me", headers=auth)).json()
+    if spin.json()["payout_cents"] == 0:
+        # The desired outcome: the last 43c is gone and the run is won.
+        assert me["balance_cents"] == 0
+        assert me["has_won"] is True
+    else:
+        # Punished with a payout — still solvent, so roulette takes the new
+        # remainder and the run stays playable.
+        roulette = await client.post(
+            "/api/v1/casino/roulette",
+            json={
+                "bet_type": "COLOR",
+                "selection": "RED",
+                "stake_cents": me["balance_cents"],
+            },
+            headers=auth,
+        )
+        assert roulette.status_code == 200, roulette.text
+
+
+@pytest.mark.asyncio
 async def test_roulette_rejects_oversized_specific_bet(client: AsyncClient):
     token = (await client.post("/api/v1/auth/guest")).json()["access_token"]
     auth = {"Authorization": f"Bearer {token}"}

@@ -55,3 +55,8 @@ string only in `core/money.ts`.
 
 **Run** — one session from a funded wallet to $0 (or to giving up, which clears
 the wallet).
+
+**Last call** — the state of a wallet holding less than the minimum stake and
+more than $0. The remaining balance becomes the only legal stake, and the only
+price a beer can cost, so a run can always reach $0. Not "all-in", which implies
+a choice the player doesn't have here.

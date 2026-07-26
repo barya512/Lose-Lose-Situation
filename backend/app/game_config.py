@@ -193,8 +193,39 @@ def max_bet_cents(balance_cents: int) -> int:
     return max(econ.MIN_BET_CENTS, int(balance_cents * econ.MAX_BET_FRACTION))
 
 
+def beer_cents(balance_cents: int) -> int:
+    """What one beer costs this wallet — ``BEER_COST_CENTS``, or a last call.
+
+    A beer is not a stake, but it obeys the same rule as ``min_bet_cents``: a
+    wallet under the list price pays whatever is left rather than being refused,
+    so the last sip always drains the run to the $0 win. An empty wallet pays
+    full price and the charge is refused — there is nothing left to drink to.
+    """
+    if 0 < balance_cents < econ.BEER_COST_CENTS:
+        return balance_cents
+    return econ.BEER_COST_CENTS
+
+
+def min_bet_cents(balance_cents: int) -> int:
+    """Smallest legal stake for this balance — the "last call" rule.
+
+    Normally ``MIN_BET_CENTS``. But a wallet holding less than the minimum and
+    more than $0 (say $0.43) would otherwise be softlocked: too poor to place any
+    bet, yet not at the $0 win condition. Below the minimum the whole remaining
+    balance becomes the ONLY legal stake, so one last $1-tier gamble can always
+    finish the run — and the last dollar can't be ground down cent-by-cent.
+
+    At $0 the run has already been won, so the normal minimum applies again and
+    the caller's balance check rejects the bet.
+    """
+    if 0 < balance_cents < econ.MIN_BET_CENTS:
+        return balance_cents
+    return econ.MIN_BET_CENTS
+
+
 def is_valid_stake(stake_cents: int, balance_cents: int) -> bool:
-    return econ.MIN_BET_CENTS <= stake_cents <= min(balance_cents, max_bet_cents(balance_cents))
+    lower = min_bet_cents(balance_cents)
+    return lower <= stake_cents <= min(balance_cents, max_bet_cents(balance_cents))
 
 
 # ---------------------------------------------------------------------------

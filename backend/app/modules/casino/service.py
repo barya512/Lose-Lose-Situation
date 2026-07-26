@@ -15,7 +15,7 @@ from app.db.models import Bet, BetModule, BetStatus, User
 from app.economy.wallet import charge_stake, credit
 from app.game_config import (
     RouletteBetType,
-    econ,
+    min_bet_cents,
     roulette_is_win,
     roulette_max_bet_cents,
     roulette_payout_multiplier,
@@ -30,8 +30,11 @@ class CasinoValidationError(ValueError):
 
 
 def _validate_stake(stake_cents: int, balance_cents: int, cap_cents: int) -> None:
-    if stake_cents < econ.MIN_BET_CENTS:
-        raise CasinoValidationError(f"minimum stake is {econ.MIN_BET_CENTS} cents")
+    # Below the configured minimum the floor becomes the whole remaining balance
+    # ("last call"), so a sub-$1 wallet can still gamble its way to the $0 win.
+    minimum = min_bet_cents(balance_cents)
+    if stake_cents < minimum:
+        raise CasinoValidationError(f"minimum stake is {minimum} cents")
     if stake_cents > balance_cents:
         raise CasinoValidationError("stake exceeds balance")
     if stake_cents > cap_cents:

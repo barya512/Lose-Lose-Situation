@@ -12,15 +12,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import User
 from app.economy.wallet import charge_stake
-from app.game_config import econ
+from app.game_config import beer_cents
 
 
-async def buy_beer(session: AsyncSession, user: User) -> User:
+async def buy_beer(session: AsyncSession, user: User) -> tuple[User, int]:
     """Charge the beer price to the user's wallet and persist.
 
-    Raises ``InsufficientFunds`` if the balance can't cover the price.
+    Returns the user alongside what this beer actually cost — a wallet holding
+    less than the list price pays its remainder instead (see ``beer_cents``), so
+    the caller can't assume the constant. Raises ``InsufficientFunds`` if the
+    balance can't cover even that, which only happens at $0.
     """
-    charge_stake(user, econ.BEER_COST_CENTS)
+    cost_cents = beer_cents(user.balance_cents)
+    charge_stake(user, cost_cents)
     await session.commit()
     await session.refresh(user)
-    return user
+    return user, cost_cents
