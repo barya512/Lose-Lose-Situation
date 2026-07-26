@@ -1,8 +1,11 @@
 """End-to-end HTTP smoke tests against in-memory SQLite.
 
-Exercises the instant-bet path (auth -> wallet -> casino formulas -> DB) through
-the real FastAPI app + dependency graph. The market path is worker-driven and is
-covered by the pure-formula tests; here we prove the synchronous wiring works.
+Exercises the synchronous paths through the real FastAPI app + dependency graph:
+auth, wallet, casino formulas, and the market's placement and offers endpoints.
+
+Market *resolution* is not here -- it is worker-driven, with no HTTP route that
+settles a bet and no way to force an outcome over the wire. That lives in
+test_market_service.py, driven through ``resolve_bet``.
 """
 
 from __future__ import annotations
@@ -14,7 +17,9 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.db import base as db_base
 from app.db.base import Base
-from app.game_config import econ
+from app.db.models import MarketItem
+from app.scripts.seed import ITEM_CATALOG
+from app.game_config import CURATED_TICKERS, econ
 
 
 @pytest_asyncio.fixture
@@ -25,6 +30,23 @@ async def client(monkeypatch):
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+    # The item catalog is reference data every real deployment has (`make seed`),
+    # and market offers roll against it, so the test DB carries it too.
+    async with testing_sessionmaker() as seed_session:
+        for spec in ITEM_CATALOG:
+            seed_session.add(
+                MarketItem(
+                    key=spec["key"],
+                    name=spec["name"],
+                    rarity=spec["rarity"].value,
+                    effect_type=spec["effect_type"].value,
+                    magnitude=spec["magnitude"],
+                    duration_s=spec["duration_s"],
+                    art_key=spec["art_key"],
+                )
+            )
+        await seed_session.commit()
 
     # Redirect the app's session factory + dependency to the test engine.
     monkeypatch.setattr(db_base, "SessionLocal", testing_sessionmaker)
@@ -238,6 +260,9 @@ def _stub_market(monkeypatch):
 
     monkeypatch.setattr("app.modules.market.service.get_provider", lambda: _FakeProvider())
     monkeypatch.setattr("app.modules.market.service.publish", _noop_publish)
+    # The offers grid prices every curated ticker, so it needs the stub too.
+    monkeypatch.setattr("app.api.v1.market.get_provider", lambda: _FakeProvider())
+
 
 
 async def _guest_auth(client: AsyncClient) -> dict[str, str]:
@@ -300,3 +325,190 @@ async def test_market_pending_bets_are_scoped_to_caller(client: AsyncClient, mon
     auth_b = await _guest_auth(client)
     resp = await client.get("/api/v1/market/bets", headers=auth_b)
     assert resp.json() == []
+
+
+@pytest.mark.asyncio
+async def test_market_offers_name_the_item_each_ticker_is_worth(
+    client: AsyncClient, monkeypatch
+):
+    """The point of the whole feature: know the prize BEFORE staking."""
+    _stub_market(monkeypatch)
+    auth = await _guest_auth(client)
+
+    resp = await client.get("/api/v1/market/offers", headers=auth)
+
+    assert resp.status_code == 200, resp.text
+    offers = resp.json()
+    assert {o["symbol"] for o in offers} == {s.symbol for s in CURATED_TICKERS}
+    withitem = [o for o in offers if o["reward_item"] is not None]
+    assert withitem, "no ticker carried a bounty"
+    for offer in withitem:
+        assert offer["reward_item"]["key"]
+        assert offer["reward_item"]["rarity"]
+        # A gate the client can render as "$N+ to qualify".
+        assert offer["reward_stake_gate_cents"] > 0
+
+
+@pytest.mark.asyncio
+async def test_market_offers_are_stable_and_survive_placing_a_bet(
+    client: AsyncClient, monkeypatch
+):
+    """The decision-1 reroll hole, guarded at the HTTP seam.
+
+    If placing a bet freed the ticker to re-roll, a player could buy an
+    unlimited reroll for the price of one minimum stake.
+    """
+    _stub_market(monkeypatch)
+    auth = await _guest_auth(client)
+
+    def by_symbol(payload):
+        return {
+            o["symbol"]: (o["reward_item"] or {}).get("key") for o in payload
+        }
+
+    first = by_symbol((await client.get("/api/v1/market/offers", headers=auth)).json())
+    second = by_symbol((await client.get("/api/v1/market/offers", headers=auth)).json())
+    assert first == second
+
+    placed = await client.post(
+        "/api/v1/market/bets",
+        json={"ticker": "BTC-USD", "direction": "DOWN", "stake_cents": 50_00,
+              "timeframe_s": 60},
+        headers=auth,
+    )
+    assert placed.status_code == 201
+
+    after = (await client.get("/api/v1/market/offers", headers=auth)).json()
+    assert by_symbol(after) == first
+    # And the tile can still say "chasing: <item>" while the bet runs.
+    btc = next(o for o in after if o["symbol"] == "BTC-USD")
+    assert btc["pending_bet_id"] == placed.json()["id"]
+
+
+@pytest.mark.asyncio
+async def test_market_offers_are_scoped_to_the_caller(client: AsyncClient, monkeypatch):
+    _stub_market(monkeypatch)
+    auth_a = await _guest_auth(client)
+    auth_b = await _guest_auth(client)
+
+    a = (await client.get("/api/v1/market/offers", headers=auth_a)).json()
+    await client.post(
+        "/api/v1/market/bets",
+        json={"ticker": "BTC-USD", "direction": "DOWN", "stake_cents": 50_00,
+              "timeframe_s": 60},
+        headers=auth_a,
+    )
+    b = (await client.get("/api/v1/market/offers", headers=auth_b)).json()
+
+    assert all(o["pending_bet_id"] is None for o in b)
+    assert next(o for o in a if o["symbol"] == "BTC-USD")
+
+
+@pytest.mark.asyncio
+async def test_market_chip_above_the_wallet_goes_all_in(client: AsyncClient, monkeypatch):
+    """No chip on the board is dead: clicking one you can't afford bets it all."""
+    _stub_market(monkeypatch)
+    monkeypatch.setattr(econ, "STARTING_BALANCE_CENTS", 43)
+    auth = await _guest_auth(client)
+
+    resp = await client.post(
+        "/api/v1/market/bets",
+        json={"ticker": "BTC-USD", "direction": "DOWN", "stake_cents": 100_00,
+              "timeframe_s": 60},
+        headers=auth,
+    )
+
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["stake_cents"] == 43  # not the $100 the client asked for
+
+
+@pytest.mark.asyncio
+async def test_market_rejects_a_stake_that_is_not_a_chip(client: AsyncClient, monkeypatch):
+    """Closes the all-in bypass: a huge stake must not become a free all-in.
+
+    If it did, MAX_BET_FRACTION would be unenforceable -- any client could post
+    an enormous number and go all in on every bet.
+    """
+    _stub_market(monkeypatch)
+    auth = await _guest_auth(client)
+    body = {"ticker": "BTC-USD", "direction": "DOWN", "timeframe_s": 60}
+
+    huge = await client.post(
+        "/api/v1/market/bets", json={**body, "stake_cents": 999_999_999}, headers=auth
+    )
+    assert huge.status_code == 400
+
+    arbitrary = await client.post(
+        "/api/v1/market/bets", json={**body, "stake_cents": 37_42}, headers=auth
+    )
+    assert arbitrary.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_market_offers_publish_the_chip_ladder(client: AsyncClient, monkeypatch):
+    """The client renders the server's ladder rather than hardcoding its own."""
+    _stub_market(monkeypatch)
+    auth = await _guest_auth(client)
+
+    offers = (await client.get("/api/v1/market/offers", headers=auth)).json()
+
+    assert offers[0]["chips_cents"] == [1_00, 10_00, 50_00, 100_00]
+
+
+@pytest.mark.asyncio
+async def test_slots_chip_above_the_wallet_goes_all_in(client: AsyncClient, monkeypatch):
+    """Same doctrine as the market: a chip you can't afford stakes everything.
+
+    Additive to the existing free-form path -- an arbitrary stake over the
+    balance is still refused, because only a ladder chip earns the clamp.
+    """
+    monkeypatch.setattr(econ, "STARTING_BALANCE_CENTS", 43)
+    auth = await _guest_auth(client)
+
+    spin = await client.post(
+        "/api/v1/casino/slots/spin", json={"stake_cents": 100_00}, headers=auth
+    )
+    assert spin.status_code == 200, spin.text
+    assert spin.json()["stake_cents"] == 43
+
+    me = (await client.get("/api/v1/me", headers=auth)).json()
+    over = await client.post(
+        "/api/v1/casino/slots/spin",
+        json={"stake_cents": me["balance_cents"] + 7},
+        headers=auth,
+    )
+    assert over.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_me_settles_the_drain_and_publishes_the_rate(client: AsyncClient):
+    """The wallet bleeds without any scheduled tick: reading it settles it.
+
+    /me also hands back the rate and the server clock so the client can
+    interpolate smoothly between polls instead of trusting its own Date.now().
+    """
+    from datetime import datetime, timedelta, timezone
+
+    from app.db.base import SessionLocal
+    from app.db.models import User
+
+    auth = await _guest_auth(client)
+    before = (await client.get("/api/v1/me", headers=auth)).json()
+    assert before["drain_rate_cents_per_s"] == 0
+    assert before["server_time"]
+
+    # Backdate the anchor rather than sleeping: same arithmetic, no wall clock.
+    async with SessionLocal() as s:
+        user = await s.scalar(User.__table__.select().limit(0)) or None
+        from sqlalchemy import select as _select
+
+        u = await s.scalar(_select(User).limit(1))
+        u.drain_rate_cents_per_s = 100
+        u.drain_anchor_at = datetime.now(timezone.utc) - timedelta(seconds=10)
+        await s.commit()
+
+    after = (await client.get("/api/v1/me", headers=auth)).json()
+
+    assert after["drain_rate_cents_per_s"] == 100
+    assert after["balance_cents"] == before["balance_cents"] - 1000
+    assert after["total_lost_cents"] == before["total_lost_cents"] + 1000

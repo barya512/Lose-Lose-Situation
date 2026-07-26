@@ -26,8 +26,16 @@
   Phaser-free testable core ([ADR 0003](adr/0003-frontend-engine.md)).
 - **Slots** — lever-triggered, 3–5 reels, live paytable panel from
   `GET /casino/slots/info`, full inverted juice.
-- **Market** — DOM panel with 15 tickers, live TradingView mini-charts, three
-  timeframes, background poll manager surviving reloads, one open bet per symbol.
+- **Market** — DOM grid of 15 ticker tiles, live TradingView mini-charts, one
+  global horizon selector, background poll manager surviving reloads, one open
+  bet per symbol.
+- **Item rewards** — each ticker carries a pre-rolled bounty the tile names
+  *before* you stake; losing above the rarity's stake gate grants it with
+  certainty. All five effects are live: `ANTI_LUCK` (price deadband),
+  `LOSS_MULT`, `STAKE_MULT` (chips + cap), `WIN_DAMPEN` (market + casino) and
+  `PASSIVE_DRAIN` (lazily accrued, smoothly interpolated).
+- **Cross-screen settles** — `core/betWatcher.ts` polls independently of any
+  scene, so a bet placed in the market announces itself in the casino.
 - **Beer** — `POST /beer/buy` plus the poison-hub orb with a 2s radial cooldown.
 - **Navigation** — Poison hub → Casino machine picker → Slots, with a single
   global `$0` → Win gate.
@@ -38,15 +46,21 @@
 
 ## Next actions
 
-1. **Playtest and turn the `ECON_*` knobs** — no redeploy needed, see the
+1. **Playtest the item economy.** Three constants no test can settle:
+   `ANTI_LUCK_MARGIN_PER_MAGNITUDE` (the most dangerous knob in the game — too
+   high and a single Black Cat makes every market bet auto-lose, which here is a
+   win button), `item_stake_gate_cents`, and `OFFER_ITEM_CHANCE`. All are
+   `ECON_*`-overridable, so no redeploy — see the
    [formula cheatsheet](formula-cheatsheet.md).
 2. **Roulette scene** — the backend endpoint already exists; only the client card
    is disabled.
 3. **Blackjack** — needs both a backend module and a scene.
-4. **Item-drop UI** — drops already resolve and land in `user_inventory`, and
-   `/me` returns the active inventory, but nothing in the client shows them.
-5. **Real art** — swap bakes for hand-authored assets by texture key; checklist
-   in [asset-list.md](asset-list.md).
+4. **Active-items readout** — offers, drops and effects are all live and the
+   market tile draws its bounty, but there is still no persistent HUD element
+   telling the player which effects are currently biting them.
+5. **Real art** — swap bakes for hand-authored assets by key; checklist in
+   [asset-list.md](asset-list.md). Item icons are procedural placeholders in
+   `core/itemArt.ts` and swap to real PNGs with no call-site changes.
 
 ## Stretch modules (schema already present)
 

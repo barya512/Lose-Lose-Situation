@@ -18,6 +18,44 @@ class TickerOut(BaseModel):
     is_open: bool
 
 
+class ItemOut(BaseModel):
+    """An item as the client renders it: name it, price it, draw it."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    key: str
+    name: str
+    rarity: str
+    effect_type: str
+    magnitude: float
+    duration_s: int | None = None
+    art_key: str | None = None
+
+
+class OfferOut(BaseModel):
+    """One market tile: the ticker, and what losing on it is worth.
+
+    Everything the grid needs in a single request, so 15 tiles don't fan out
+    into 15 round-trips.
+    """
+
+    symbol: str
+    name: str
+    kind: str
+    last_price: float | None = None
+    is_open: bool
+    # None = this ticker carries no bounty this cycle (an empty socket).
+    reward_item: ItemOut | None = None
+    # Minimum stake a LOSING bet must risk to actually earn the item above.
+    reward_stake_gate_cents: int | None = None
+    # Non-null while a bet is chasing this offer; the tile reads "chasing: X".
+    pending_bet_id: uuid.UUID | None = None
+    # The stake buttons, already scaled by the player's STAKE_MULT items. The
+    # client renders these rather than owning a copy -- a chip above the wallet
+    # is not disabled, it goes all in.
+    chips_cents: list[int]
+
+
 class PlaceMarketBet(BaseModel):
     ticker: str
     direction: Direction

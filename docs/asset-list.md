@@ -59,7 +59,14 @@ given in authored 720p units; the canvas underneath is twice that
 
 Item `art_key`s already referenced by the seed catalog: `item_leaky_wallet`,
 `item_moth_swarm`, `item_black_cat`, `item_broken_mirror`, `item_cursed_coin`,
-`item_void_piggybank`.
+`item_void_piggybank`, `item_high_roller`, `item_void_contract`.
+
+These are drawn today by `client/src/core/itemArt.ts` as procedural rarity
+plates baked to **data URLs** (the market tile is DOM, so it cannot read a
+Phaser texture). Dropping in real art means keying a PNG import by `art_key` in
+that one file — no call-site changes, exactly as `SYMBOL_STYLE[s].icon` works
+for the slot symbols. Icons are 48x48 and the rim colour encodes rarity, so a
+replacement should keep the same footprint or the grid reflows.
 
 ## Audio assets (theme is INVERTED)
 

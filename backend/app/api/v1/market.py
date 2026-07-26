@@ -6,19 +6,28 @@ import asyncio
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.deps import get_current_user
 from app.db.base import get_session
-from app.db.models import Bet, BetStatus, User
-from app.game_config import CURATED_TICKERS, is_market_open
+from app.db.models import Bet, BetStatus, MarketItem, User
+from app.game_config import (
+    CURATED_TICKERS,
+    ItemRarity,
+    chip_ladder_cents,
+    is_market_open,
+    item_stake_gate_cents,
+)
+from app.modules.market.offers import ensure_offers
 from app.modules.market.providers import ProviderError, get_provider
 from app.modules.market.service import (
     BetValidationError,
+    active_effects,
     list_market_bets,
     place_market_bet,
 )
-from app.schemas.market import MarketBetOut, PlaceMarketBet, TickerOut
+from app.schemas.market import ItemOut, MarketBetOut, OfferOut, PlaceMarketBet, TickerOut
 
 router = APIRouter(prefix="/market", tags=["market"])
 
@@ -48,6 +57,58 @@ async def tickers() -> list[TickerOut]:
         )
         for spec, price in zip(CURATED_TICKERS, prices)
     ]
+
+
+@router.get("/offers", response_model=list[OfferOut])
+async def offers(
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> list[OfferOut]:
+    """Every curated ticker plus the item bounty currently pinned to it.
+
+    The tile has to name its prize before the player commits a stake, so the
+    reward is rolled and persisted server-side rather than decided at resolve
+    time. Re-reading this endpoint never re-rolls (see modules/market/offers).
+    """
+    rolled = await ensure_offers(session, user)
+    await session.commit()
+
+    effects = await active_effects(session, user)
+    chips = chip_ladder_cents(effects, user.balance_cents)
+
+    provider = get_provider()
+    prices = await asyncio.gather(
+        *(_price_or_none(provider, spec.symbol) for spec in CURATED_TICKERS)
+    )
+    item_ids = [o.item_id for o in rolled if o.item_id is not None]
+    items = {
+        item.id: item
+        for item in await session.scalars(
+            select(MarketItem).where(MarketItem.id.in_(item_ids))
+        )
+    } if item_ids else {}
+
+    out: list[OfferOut] = []
+    for spec, offer, price in zip(CURATED_TICKERS, rolled, prices):
+        item = items.get(offer.item_id) if offer.item_id else None
+        out.append(
+            OfferOut(
+                symbol=spec.symbol,
+                name=spec.name,
+                kind=spec.kind.value,
+                last_price=price,
+                is_open=is_market_open(spec),
+                reward_item=ItemOut.model_validate(item) if item else None,
+                reward_stake_gate_cents=(
+                    item_stake_gate_cents(ItemRarity(item.rarity), user.balance_cents)
+                    if item
+                    else None
+                ),
+                pending_bet_id=offer.consumed_by_bet_id,
+                chips_cents=chips,
+            )
+        )
+    return out
 
 
 @router.post("/bets", response_model=MarketBetOut, status_code=status.HTTP_201_CREATED)

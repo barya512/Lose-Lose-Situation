@@ -93,7 +93,7 @@ CDN dependency at play time.
 | Module | Responsibility |
 |--------|----------------|
 | `api.ts` | Typed `fetch` wrapper over every endpoint; throws `ApiError` with the server's message. Base URL from `VITE_API_BASE`. |
-| `session.ts` | The wallet store: token persistence, `setUser`, `applyBeerResult`, `progressToZero()`, `onChange` / `onWin` subscriptions, `clear()`. |
+| `session.ts` | The wallet store: token persistence, `setUser`, `applyBeerResult`, `progressToZero()`, `onChange` / `onWin` subscriptions, `clear()`. Also `displayBalanceCents` — the snapshot minus whatever the passive drain has bled since, interpolated at 10Hz against an injectable clock. |
 | `theme.ts` | Palette, type and chrome geometry (above). |
 | `viewport.ts` | `GAME_WIDTH`/`GAME_HEIGHT`/`RENDER_SCALE`/`fitCamera`. Owns the coordinate space so `main.ts` isn't an import cycle. |
 | `money.ts` | `dollars(cents)` — grouped `$` string that **always shows cents**, so `$0.40` never renders as `$0` (that would read as a won game). |
@@ -101,6 +101,9 @@ CDN dependency at play time.
 | `slotLogic.ts` | `stepReelCount(cur, delta, min, max)` — ±1, clamped. |
 | `pressGuard.ts` | A click requires a matching press on the same widget ([ADR 0004](adr/0004-click-requires-matching-press.md)). |
 | `assets.ts` | Every texture: canvas-2D bakes + the real PNG/MP3 imports. `TEX` is the key registry. |
+| `canvasArt.ts` | The drawing primitives (`rgba`, `roundedPath`, `bakeDataUrl`), Phaser-free so both texture bakes and DOM icons share one pipeline. |
+| `itemArt.ts` | `itemIconUrl(artKey, rarity)` — item icons baked to data URLs for DOM `<img>`. Memoized; rarity is the rim colour; degrades to a fallback rather than throwing when no 2D context exists. |
+| `betWatcher.ts` | The background poll manager. Owns the bet status diff, a `localStorage`-backed known-status map, and an adaptive interval (3s near a resolution, 30s away, idle when nothing is pending). |
 | `audio.ts` | `playSpin`, `playLossReward`, `playGainPunish`, music beds. |
 | `juice.ts` | `flash`, `coinBurst`, `shake`, `glitch`, `winReaction`. |
 | `tradingview.ts` | `mountMiniChart` — the market panel's embedded charts. |
@@ -115,9 +118,23 @@ stock, deal-in entrance) · `BeerButton` (orb + radial-wipe cooldown) · `Backdr
 (`paintBackdrop` — first call in every scene's `create()`) · `TopHud`
 (`WalletPanel` + `ProgressPanel`, welded to the top edge; `mountTopHud`) ·
 `BackTab` (flush bottom-left) · `SlotInfoPanel` (live paytable from
-`GET /casino/slots/info`) · `MarketPanel` and `authForm` (**DOM overlays**, not
-game objects — the market panel embeds live TradingView iframes, which would be
-far more fragile glued to canvas-rendered rows).
+`GET /casino/slots/info`) · `MarketPanel`, `NotificationLayer` and `authForm`
+(**DOM overlays**, not game objects — the market panel embeds live TradingView
+iframes, which would be far more fragile glued to canvas-rendered rows).
+
+`MarketPanel` is a grid of always-open offer tiles rather than an expanding
+drawer: the point of pre-rolled bounties is that you can *scan* fifteen of them
+and pick one. Two clicks place a bet — chip, then direction, which **is** the
+commit. No confirm modal (it would wreck the pace of a game built on rapid
+repeated wagering) and no disabled chips (one above the wallet relabels the
+direction buttons to `ALL IN` and stakes everything, which for a nearly-broke
+player is the correct play).
+
+`NotificationLayer` is mounted once from `main.ts`, not per scene — the whole
+point is that a settle reaches you wherever you are. Like `authForm` it must
+`stopPropagation` on `mousedown`/`mouseup`, or Phaser's window-level listeners
+hit-test the click against the scene behind it
+([ADR 0004](adr/0004-click-requires-matching-press.md)).
 
 ### `src/scenes/`
 

@@ -24,16 +24,26 @@ export class WalletPanel extends Phaser.GameObjects.Container {
 
     this.unsubscribe = session.onChange((u) => this.render(u));
     if (session.user) {
-      this.displayedCents = session.user.balance_cents;
+      this.displayedCents = session.displayBalanceCents;
       this.render(session.user);
     }
     this.once(Phaser.GameObjects.Events.DESTROY, () => this.unsubscribe());
   }
 
-  private render(user: User): void {
+  private render(_user: User): void {
     const from = this.displayedCents;
-    const to = user.balance_cents;
+    const to = session.displayBalanceCents;
     this.displayedCents = to;
+
+    // A passive drain fires onChange at 10Hz. Tweening each of those would pile
+    // up ~4 overlapping counters at all times, and they'd fight each other over
+    // the same label. The drain is already smooth by construction, so only a
+    // discrete change (a wager settling) earns the ease.
+    if (session.user?.drain_rate_cents_per_s) {
+      this.balanceText.setText(dollars(to));
+      return;
+    }
+
     this.scene.tweens.addCounter({
       from, to, duration: 400, ease: 'Cubic.Out',
       onUpdate: (tw) => this.balanceText.setText(dollars(Math.round(tw.getValue() ?? to))),

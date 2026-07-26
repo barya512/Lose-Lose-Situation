@@ -68,3 +68,21 @@ Randomised detail (cloth noise, card foxing) is driven by a small seeded LCG, no
 - Colour and type literals must come from `core/theme.ts`. A hard-coded hex is
   now a bug: it is invisible to a palette change and to the DOM overlays that
   read the same tokens as CSS strings.
+
+## Amendment: baking also serves the DOM
+
+This ADR assumed Phaser textures were the only target — `bake()` writes straight
+into `scene.textures`. Item icons broke that: the market grid is a DOM overlay,
+so a `<div>` tile cannot read a Phaser texture no matter how it was produced.
+
+The drawing primitives (`rgba`, `roundedPath`, and the canvas half of `bake`)
+now live in a Phaser-free `core/canvasArt.ts`, shared by `core/assets.ts` (which
+still bakes to textures) and `core/itemArt.ts` (which bakes to `toDataURL()` for
+an `<img src>`). Same palette, same tokens, same "procedural and keyed, real art
+drops in later" promise — one more output format.
+
+`bakeDataUrl` returns `null` rather than throwing when no 2D context is
+available. That is not only a jsdom concern: a real browser can refuse a context
+(lost GPU context, fingerprinting protection), and an icon must never be the
+thing that takes down a render. Callers are expected to have a legible fallback,
+which for an item icon is its name in the `alt` text.

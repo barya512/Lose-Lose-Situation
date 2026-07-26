@@ -138,3 +138,54 @@ describe('Session', () => {
     expect(b.user).toBeNull();
   });
 });
+
+describe('Session passive drain', () => {
+  // The wallet bleeds continuously but the server only writes on request
+  // boundaries, so the client interpolates against a rate + anchor. These pin
+  // the arithmetic that makes the on-screen number honest between polls.
+  function drainingUser(rate: number): User {
+    return user({ balance_cents: 10_000, drain_rate_cents_per_s: rate });
+  }
+
+  it('reports the plain balance when nothing is draining', () => {
+    const s = new Session(memoryStorage(), () => 1_000);
+    s.setAuth(tokenResult());
+    s.setUser(drainingUser(0));
+    expect(s.displayBalanceCents).toBe(10_000);
+  });
+
+  it('interpolates the balance down at the drain rate', () => {
+    let now = 1_000;
+    const s = new Session(memoryStorage(), () => now);
+    s.setAuth(tokenResult());
+    s.setUser(drainingUser(100));
+
+    now = 11_000; // ten seconds later
+    expect(s.displayBalanceCents).toBe(9_000);
+  });
+
+  it('never interpolates below zero', () => {
+    let now = 1_000;
+    const s = new Session(memoryStorage(), () => now);
+    s.setAuth(tokenResult());
+    s.setUser(drainingUser(100));
+
+    now = 1_000_000;
+    expect(s.displayBalanceCents).toBe(0);
+  });
+
+  it('re-anchors on every server snapshot so drift cannot accumulate', () => {
+    let now = 1_000;
+    const s = new Session(memoryStorage(), () => now);
+    s.setAuth(tokenResult());
+    s.setUser(drainingUser(100));
+
+    now = 11_000;
+    // A fresh snapshot is authoritative: interpolation restarts from it.
+    s.setUser(user({ balance_cents: 9_500, drain_rate_cents_per_s: 100 }));
+    expect(s.displayBalanceCents).toBe(9_500);
+
+    now = 16_000;
+    expect(s.displayBalanceCents).toBe(9_000);
+  });
+});

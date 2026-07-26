@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import service
+from app.economy.drain import settle_drain
 from app.auth.deps import get_current_user
 from app.auth.security import create_access_token
 from app.db.base import get_session
@@ -47,6 +50,12 @@ async def me(
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> MeOut:
+    # Settling here (rather than on a schedule) is the whole drain design: any
+    # request that already has the user loaded brings the wallet up to date.
+    now = datetime.now(timezone.utc)
+    if settle_drain(user, now):
+        await session.commit()
+
     inventory_rows = await service.load_inventory(session, user.id)
     inventory = [
         InventoryItemOut(
@@ -62,4 +71,9 @@ async def me(
     # Build from UserOut fields explicitly so pydantic never lazy-loads the ORM
     # `inventory` relationship (which would raise MissingGreenlet on an AsyncSession).
     user_out = UserOut.model_validate(user)
-    return MeOut(**user_out.model_dump(), inventory=inventory)
+    return MeOut(
+        **user_out.model_dump(),
+        inventory=inventory,
+        drain_rate_cents_per_s=user.drain_rate_cents_per_s,
+        server_time=now,
+    )

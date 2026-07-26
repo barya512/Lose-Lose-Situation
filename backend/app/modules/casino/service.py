@@ -8,13 +8,17 @@ simply removes the stake — the desired outcome.
 from __future__ import annotations
 
 import random
+from collections.abc import Sequence
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Bet, BetModule, BetStatus, User
 from app.economy.wallet import charge_stake, credit
 from app.game_config import (
+    ItemEffect,
     RouletteBetType,
+    chip_ladder_cents,
+    dampened_payout_cents,
     min_bet_cents,
     roulette_is_win,
     roulette_max_bet_cents,
@@ -23,10 +27,29 @@ from app.game_config import (
     spin_roulette,
     spin_slots,
 )
+from app.modules.market.service import active_effects
 
 
 class CasinoValidationError(ValueError):
     pass
+
+
+def resolve_stake(
+    stake_cents: int, balance_cents: int, effects: Sequence[tuple[ItemEffect, float]] = ()
+) -> int:
+    """Turn a requested stake into the amount actually committed.
+
+    A value that matches one of the player's chips is clamped to the wallet, so
+    clicking a chip you can't afford goes all in rather than erroring -- the
+    same rule the market uses. Any OTHER over-balance number is still refused:
+    only a real chip earns the clamp, or a client could post an arbitrary huge
+    stake and go all in on every spin.
+    """
+    if stake_cents > balance_cents and stake_cents in chip_ladder_cents(
+        effects, balance_cents
+    ):
+        return balance_cents
+    return stake_cents
 
 
 def _validate_stake(stake_cents: int, balance_cents: int, cap_cents: int) -> None:
@@ -51,6 +74,8 @@ async def play_roulette(
     rng: random.Random | None = None,
 ) -> Bet:
     rng = rng or random.Random()
+    effects = await active_effects(session, user)
+    stake_cents = resolve_stake(stake_cents, user.balance_cents, effects)
     cap = roulette_max_bet_cents(bet_type, user.balance_cents)
     _validate_stake(stake_cents, user.balance_cents, cap)
 
@@ -58,6 +83,7 @@ async def play_roulette(
     pocket = spin_roulette(rng)
     won = roulette_is_win(bet_type, pocket, selection)
     payout = int(stake_cents * roulette_payout_multiplier(bet_type)) if won else 0
+    payout = dampened_payout_cents(payout, stake_cents, effects)
     if payout:
         credit(user, payout)
 
@@ -93,11 +119,15 @@ async def play_slots(
 ) -> Bet:
     rng = rng or random.Random()
     # Slots have no per-type cap beyond the standard min + balance check.
+    effects = await active_effects(session, user)
+    stake_cents = resolve_stake(stake_cents, user.balance_cents, effects)
     _validate_stake(stake_cents, user.balance_cents, user.balance_cents)
 
     charge_stake(user, stake_cents)
     symbols = spin_slots(reels, rng)
-    payout = slots_payout_cents(symbols, stake_cents)
+    payout = dampened_payout_cents(
+        slots_payout_cents(symbols, stake_cents), stake_cents, effects
+    )
     if payout:
         credit(user, payout)
 

@@ -2,6 +2,13 @@ import type { BeerResult, TokenResult, User } from './types';
 
 const STORAGE_KEY = 'lose-lose.session';
 
+/**
+ * How often a draining wallet repaints. 10Hz reads as continuous without
+ * asking the server for anything — the number is derived locally from the
+ * rate, and only corrected when a real snapshot arrives.
+ */
+const DRAIN_TICK_MS = 100;
+
 interface Persisted {
   token: string;
   user: User;
@@ -17,9 +24,16 @@ export class Session {
   private _wonFired = false;
   private changeCbs = new Set<UserCb>();
   private winCbs = new Set<UserCb>();
+  /** When the current balance snapshot was taken, by the injected clock. */
+  private _balanceAt = 0;
+  private drainTimer: ReturnType<typeof setInterval> | null = null;
 
-  constructor(private storage: Storage = window.localStorage) {
+  constructor(
+    private storage: Storage = window.localStorage,
+    private now: () => number = () => Date.now(),
+  ) {
     this.load();
+    this._balanceAt = this.now();
   }
 
   get token(): string | null { return this._token; }
@@ -35,8 +49,12 @@ export class Session {
 
   setUser(user: User): void {
     this._user = user;
+    // Every server snapshot re-anchors the interpolation, so client-side drift
+    // can never accumulate past one poll interval.
+    this._balanceAt = this.now();
     if (this._startingBalance === null) this._startingBalance = user.balance_cents;
     this.persist();
+    this.syncDrainTimer();
     this.changeCbs.forEach((cb) => cb(user));
     if (user.has_won && !this._wonFired) {
       this._wonFired = true;
@@ -65,12 +83,52 @@ export class Session {
     this._user = null;
     this._startingBalance = null;
     this._wonFired = false;
+    if (this.drainTimer !== null) {
+      clearInterval(this.drainTimer);
+      this.drainTimer = null;
+    }
     this.storage.removeItem(STORAGE_KEY);
+  }
+
+  /**
+   * The balance to PUT ON SCREEN: the last server snapshot, minus whatever the
+   * passive drain has bled since it arrived.
+   *
+   * The server settles the drain lazily (only when a request already has the
+   * user loaded), so between polls the stored balance is stale by design. This
+   * interpolates over that gap so the wallet visibly melts. It never goes below
+   * zero — reaching $0 is the win, and the confirming fetch drives that gate.
+   */
+  get displayBalanceCents(): number {
+    if (!this._user) return 0;
+    const rate = this._user.drain_rate_cents_per_s ?? 0;
+    if (rate <= 0) return this._user.balance_cents;
+    const elapsedS = Math.max(0, (this.now() - this._balanceAt) / 1000);
+    return Math.max(0, this._user.balance_cents - Math.floor(rate * elapsedS));
+  }
+
+  /**
+   * Run `cb` on every drain tick while a drain is active. Returns an
+   * unsubscribe. Separate from onChange so the HUD can tell a smooth drain tick
+   * from a discrete wager and skip its 400ms tween on the former.
+   */
+  private syncDrainTimer(): void {
+    const rate = this._user?.drain_rate_cents_per_s ?? 0;
+    if (rate > 0 && this.drainTimer === null) {
+      this.drainTimer = setInterval(() => {
+        if (this._user) this.changeCbs.forEach((cb) => cb(this._user!));
+      }, DRAIN_TICK_MS);
+    } else if (rate <= 0 && this.drainTimer !== null) {
+      clearInterval(this.drainTimer);
+      this.drainTimer = null;
+    }
   }
 
   progressToZero(): number {
     if (!this._user || !this._startingBalance) return 0;
-    const p = 1 - this._user.balance_cents / this._startingBalance;
+    // Reads the interpolated balance so the bar creeps with the drain rather
+    // than jumping a poll at a time.
+    const p = 1 - this.displayBalanceCents / this._startingBalance;
     return Math.min(1, Math.max(0, p));
   }
 

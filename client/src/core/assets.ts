@@ -1,5 +1,7 @@
 import Phaser from 'phaser';
 import { chrome, color, font } from './theme';
+// Shared with core/itemArt, which bakes the same palette to data URLs for DOM.
+import { rgba, roundedPath } from './canvasArt';
 import { GAME_WIDTH, GAME_HEIGHT, RENDER_SCALE } from './viewport';
 import cherryIcon from '../../../assets/CHERRY.png';
 import lemonIcon from '../../../assets/LEMON.png';
@@ -100,12 +102,7 @@ export function loadMusic(scene: Phaser.Scene): void {
 // --- baking helpers ---------------------------------------------------------
 
 /** `0xRRGGBB` → `rgba()`, for canvas fills. */
-function rgba(c: number, alpha = 1): string {
-  const r = (c >> 16) & 0xff;
-  const g = (c >> 8) & 0xff;
-  const b = c & 0xff;
-  return `rgba(${r},${g},${b},${alpha})`;
-}
+
 
 /**
  * Bake a drawing into a texture through a real 2D canvas context.
@@ -148,23 +145,7 @@ function seeded(seed: number): () => number {
 }
 
 /** Rounded rect with per-corner radii `[tl, tr, br, bl]`. */
-function roundedPath(
-  ctx: CanvasRenderingContext2D,
-  x: number, y: number, w: number, h: number, r: [number, number, number, number],
-): void {
-  const [tl, tr, br, bl] = r;
-  ctx.beginPath();
-  ctx.moveTo(x + tl, y);
-  ctx.lineTo(x + w - tr, y);
-  ctx.arcTo(x + w, y, x + w, y + tr, tr);
-  ctx.lineTo(x + w, y + h - br);
-  ctx.arcTo(x + w, y + h, x + w - br, y + h, br);
-  ctx.lineTo(x + bl, y + h);
-  ctx.arcTo(x, y + h, x, y + h - bl, bl);
-  ctx.lineTo(x, y + tl);
-  ctx.arcTo(x, y, x + tl, y, tl);
-  ctx.closePath();
-}
+
 
 /** A flat panel with a gold rim — the shape all the edge chrome shares. */
 function drawChrome(

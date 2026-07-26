@@ -34,6 +34,14 @@ ITEM_CATALOG: list[dict] = [
     dict(key="void_piggybank", name="Void Piggybank", rarity=ItemRarity.LEGENDARY,
          effect_type=ItemEffect.PASSIVE_DRAIN, magnitude=0.05, duration_s=None,
          art_key="item_void_piggybank"),
+    # Bigger chips AND a bigger cap, so the item that lets you gamble more is
+    # also what unlocks the stake gates on the better items.
+    dict(key="high_roller", name="High Roller", rarity=ItemRarity.EPIC,
+         effect_type=ItemEffect.STAKE_MULT, magnitude=1.0, duration_s=1800,
+         art_key="item_high_roller"),
+    dict(key="void_contract", name="Void Contract", rarity=ItemRarity.LEGENDARY,
+         effect_type=ItemEffect.WIN_DAMPEN, magnitude=0.5, duration_s=None,
+         art_key="item_void_contract"),
 ]
 
 

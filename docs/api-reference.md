@@ -61,6 +61,34 @@ Errors: 400 (validation — unknown ticker, **market closed**, bad timeframe, st
 outside the allowed range, or **one open bet per symbol**: a second bet on a
 ticker you already have `PENDING` is rejected), 503 (market data unavailable).
 
+### `GET /market/offers`  *(auth)*
+Every curated ticker plus the **item bounty pinned to it** — one request for the
+whole grid rather than one per tile. The reward is rolled and persisted *before*
+the player bets, so a tile can name its prize while the stake is still a choice.
+
+Re-reading never re-rolls: an offer the player has already seen is a promise.
+It re-rolls only when a bet on that ticker resolves, so one attempt buys exactly
+one reroll. `pending_bet_id` is non-null while a bet is chasing it.
+
+`chips_cents` is the player's stake ladder, already scaled by any `STAKE_MULT`
+item — the client renders this rather than keeping its own copy, because a chip
+above the wallet goes **all-in** and that exemption has to be server-checked.
+`reward_stake_gate_cents` is the minimum stake a losing bet must risk to
+actually earn the item.
+```json
+→ 200 [ { "symbol": "BTC-USD", "name": "Bitcoin", "kind": "CRYPTO",
+          "last_price": 61204.0, "is_open": true,
+          "reward_item": { "key": "black_cat", "name": "Black Cat",
+                           "rarity": "RARE", "effect_type": "ANTI_LUCK",
+                           "magnitude": 0.1, "duration_s": 1800,
+                           "art_key": "item_black_cat" },
+          "reward_stake_gate_cents": 5000, "pending_bet_id": null,
+          "chips_cents": [100, 1000, 5000, 10000] } ]
+```
+A ticker with no bounty this cycle returns `reward_item: null` (the client draws
+an empty socket). A per-ticker price failure yields `last_price: null` rather
+than failing the whole grid.
+
 ### `GET /market/bets`  *(auth)*
 The caller's market bets, newest-resolving first. Optional `?status=PENDING`
 filter (case-insensitive; invalid value → 400). This is the client's source of

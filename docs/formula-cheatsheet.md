@@ -114,6 +114,90 @@ Together these hold the punish-rate (any-payout spin) around 30% on both 3 and 5
 reels. `SKULL`/`SEVEN` are the rare jackpot tier — pays the most, so worst for
 the player.
 
+## Item effects
+
+Items are the market's reward loop. Each carries an `effect_type` and a
+`magnitude`; every effect is a pure function over the player's *active*
+inventory (`modules/market/service.active_effects`), so nothing in
+`game_config.py` touches the database.
+
+Magnitude is always a **bonus fraction**, never an absolute, so duplicates stack
+by summing and every effect has a cap.
+
+| Effect | Function | Magnitude means | Cap |
+|---|---|---|---|
+| `ANTI_LUCK` | `anti_luck_margin` | price deadband per point (`0.02`/pt) | `ANTI_LUCK_MARGIN_CAP` (1%) |
+| `LOSS_MULT` | `item_loss_multiplier` | extra term in the penalty stack | `ITEM_LOSS_MULT_CAP` (1.5) |
+| `STAKE_MULT` | `stake_multiplier` | bonus on chips **and** the cap | `STAKE_MULT_CAP` (2.0) |
+| `WIN_DAMPEN` | `win_dampen_factor` | share of a winning gain removed | `WIN_DAMPEN_CAP` (0.9) |
+| `PASSIVE_DRAIN` | `drain_rate_cents_per_s` | share of the *starting* wallet per `DRAIN_PERIOD_S` | — |
+
+### ANTI_LUCK is a price margin, not a probability
+
+`direction_from_prices(start, end, anti_luck_margin, bet_direction)` applies the
+margin **against the player's own call**: an UP bet only counts as a hit if the
+price cleared `start * (1 + margin)`. Inside the band it reads as a miss — a
+`LOST`, which is the outcome the player wants.
+
+> ⚠️ `ANTI_LUCK_MARGIN_PER_MAGNITUDE` is the most dangerous knob in the economy.
+> Black Cat's `magnitude=0.10` read as a raw price fraction would demand a **10%
+> move inside a 60-second bet**, so every market bet would auto-lose — and since
+> losing is the goal, that is a win button. At the shipped `0.02` it is a 0.2%
+> deadband. Expect to tune this from playtest.
+
+### WIN_DAMPEN never zeroes a win
+
+Applied to the *gain* only, never the returned stake, so a dampened win can't
+become a net loss. The cap keeps the factor above zero: a win that gained
+nothing would make the punishing outcome free, and the market would lose its
+only source of pressure. Applies to casino payouts too
+(`dampened_payout_cents`), or the player dodges the item by switching machines.
+
+### STAKE_MULT raises the ladder and the cap together
+
+`chip_ladder_cents` and `max_bet_cents` take the same multiplier. Scaling only
+the chips would push the top rungs past `MAX_BET_FRACTION` and grey them out —
+the item would get *worse* the stronger it got.
+
+## Stake gates: risk buys rarity
+
+`item_stake_gate_cents(rarity, balance)` is the minimum stake a **losing** bet
+must have risked to actually earn its pinned item: 1% / 5% / 10% / 25% of the
+wallet for COMMON / RARE / EPIC / LEGENDARY. The legendary gate lands exactly on
+`MAX_BET_FRACTION` — the largest bet the game normally allows.
+
+This replaces the old hidden `item_drop_chance` roll on the market path with a
+visible, deterministic commitment. Farming is an **intended** mechanic: the gate
+is the loop's price, not a wall. Every gate is capped at the wallet, so going
+all-in always qualifies — a nearly-broke player can still chase a legendary, and
+the desperate play stays the correct one.
+
+## The chip ladder is server-canonical
+
+`STAKE_CHIPS_CENTS` lives in `game_config.py` and reaches the client through
+`GET /market/offers`. It has to be canonical because **all-in deliberately
+overrides `max_bet_cents`**: if the rule were "any stake at or above the balance
+goes all in", a client could post `stake_cents: 999999999` and bypass
+`MAX_BET_FRACTION` on every bet. Instead `is_valid_stake` grants the all-in
+exemption only when a chip on *this player's* ladder is at or above the balance.
+
+## Passive drain: lazy accrual
+
+The wallet is never ticked on a schedule. `users.drain_rate_cents_per_s` plus
+`users.drain_anchor_at` let `economy/drain.py` derive what has bled whenever a
+request already has the user loaded (auth, `/me`, bet resolution) — no write per
+holder per second, no drift when the worker stalls, no race with `resolve_bet`'s
+`SELECT ... FOR UPDATE`. The client interpolates between those points
+(`Session.displayBalanceCents`) so the number still melts on screen.
+
+`settle_drain` routes through `wallet.apply_delta`, so the $0 clamp,
+`total_lost_cents` and the `has_won` flip all keep working and `wallet.py`
+remains the only place a balance changes.
+
+> `DRAIN_MAX_OFFLINE_S` (300) caps accrual while away. A permanent drain item is
+> the farming loop's best prize; uncapped, the reward for engaging with the game
+> would be that the run finishes without you.
+
 ## Balancing harness
 
 `backend/tests/test_economy_sim.py` runs an "always bet" simulation and asserts

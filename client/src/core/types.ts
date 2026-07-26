@@ -6,6 +6,55 @@ export interface User {
   total_lost_cents: number;
   bets_count: number;
   has_won: boolean;
+  /**
+   * Cents per second the wallet bleeds from PASSIVE_DRAIN items. The server
+   * settles this lazily, so the client interpolates against it between polls
+   * (see Session.displayBalanceCents). Absent on older snapshots.
+   */
+  drain_rate_cents_per_s?: number;
+  /** Inventory as returned by GET /me; absent on auth responses. */
+  inventory?: InventoryItem[];
+}
+
+export interface InventoryItem {
+  item_key: string;
+  name: string;
+  rarity: ItemRarity;
+  effect_type: ItemEffect;
+  magnitude: number;
+  active: boolean;
+}
+
+export type ItemRarity = 'COMMON' | 'RARE' | 'EPIC' | 'LEGENDARY';
+
+export type ItemEffect =
+  | 'PASSIVE_DRAIN'
+  | 'LOSS_MULT'
+  | 'ANTI_LUCK'
+  | 'STAKE_MULT'
+  | 'WIN_DAMPEN';
+
+export interface MarketItem {
+  key: string;
+  name: string;
+  rarity: ItemRarity;
+  effect_type: ItemEffect;
+  magnitude: number;
+  duration_s: number | null;
+  art_key: string | null;
+}
+
+/** One market tile: the ticker, and what LOSING on it is worth. */
+export interface Offer {
+  symbol: string;
+  name: string;
+  kind: string;
+  last_price: number | null;
+  is_open: boolean;
+  reward_item: MarketItem | null;
+  reward_stake_gate_cents: number | null;
+  pending_bet_id: string | null;
+  chips_cents: number[];
 }
 
 export interface TokenResult {
@@ -56,7 +105,12 @@ export interface MarketTicker {
   is_open: boolean;
 }
 
-export type MarketBetStatus = 'PENDING' | 'WON' | 'LOST';
+/**
+ * VOID is a real status, not dead enum: the server refuses to settle a bet that
+ * was still in flight when the run reached $0, since market stakes aren't
+ * pre-charged and paying out would fund an already-won run.
+ */
+export type MarketBetStatus = 'PENDING' | 'WON' | 'LOST' | 'VOID';
 
 export interface MarketBet {
   id: string;

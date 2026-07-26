@@ -18,6 +18,7 @@ Playtesters: see docs/formula-cheatsheet.md for a plain-English guide.
 from __future__ import annotations
 
 import random
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, time, timezone
 from enum import Enum
@@ -45,6 +46,20 @@ class ItemRarity(str, Enum):
     RARE = "RARE"
     EPIC = "EPIC"
     LEGENDARY = "LEGENDARY"
+
+
+class ItemEffect(str, Enum):
+    """What an item does to the economy.
+
+    Lives here rather than beside the ORM model because the formulas below
+    dispatch on it, and this module is deliberately DB-free.
+    """
+
+    PASSIVE_DRAIN = "PASSIVE_DRAIN"  # slowly bleeds money (good for the player)
+    LOSS_MULT = "LOSS_MULT"  # amplifies loss penalties
+    ANTI_LUCK = "ANTI_LUCK"  # nudges outcomes toward losing
+    STAKE_MULT = "STAKE_MULT"  # bigger chips AND a bigger cap
+    WIN_DAMPEN = "WIN_DAMPEN"  # a win still hurts, just less
 
 
 # ---------------------------------------------------------------------------
@@ -82,6 +97,37 @@ class Economy(BaseSettings):
     # --- Item drops ---
     ITEM_DROP_BASE_RATE: float = 0.03  # base chance per qualifying (losing) market bet
     ITEM_DROP_RISK_BONUS: float = 0.12  # extra chance scaled by how big the bet was
+
+    # Chance a ticker's offer carries an item at all. At 0.35 roughly two-thirds
+    # of a 15-tile grid shows an empty socket, so the reward system reads as
+    # broken more often than exciting; the stake gates, not this, are what keep
+    # the good items expensive.
+    OFFER_ITEM_CHANCE: float = 0.60
+
+    # --- Item effects: STAKE_MULT ---
+    # Bonus fraction ceiling however many stack: 2.0 => chips at most tripled.
+    STAKE_MULT_CAP: float = 2.0
+
+    # --- Item effects: LOSS_MULT / WIN_DAMPEN ---
+    ITEM_LOSS_MULT_CAP: float = 1.50  # ceiling on the item term of the penalty stack
+    WIN_DAMPEN_CAP: float = 0.90  # at most 90% of a gain removed -- never all of it
+
+    # --- Item effects: PASSIVE_DRAIN ---
+    # A drain item's magnitude is the share of the STARTING wallet it bleeds per
+    # DRAIN_PERIOD_S, so the rate is a constant the client can interpolate.
+    DRAIN_PERIOD_S: int = 60
+    # Accrual while away is capped: a permanent drain is the farming loop's best
+    # prize, and uncapped offline bleed would mean the reward for engaging with
+    # the game is that it finishes without you.
+    DRAIN_MAX_OFFLINE_S: int = 300
+
+    # --- Item effects: ANTI_LUCK ---
+    # An item's `magnitude` is NOT a raw price fraction. Black Cat's 0.10 read
+    # that way would demand a 10% move inside a 60s bet, which never happens —
+    # every market bet would auto-lose, and since losing is the goal that is a
+    # win button. These translate magnitude into a believable deadband instead.
+    ANTI_LUCK_MARGIN_PER_MAGNITUDE: float = 0.02  # 0.10 magnitude -> 0.2% margin
+    ANTI_LUCK_MARGIN_CAP: float = 0.01  # 1% ceiling, however many charms stack
 
     # --- Casino: roulette max-bet limits scale INVERSELY with bet specificity ---
     # Fraction-of-balance cap per bet type. Specific bets => tiny caps (anti-abuse).
@@ -182,15 +228,61 @@ def is_market_open(spec: TickerSpec, now: datetime | None = None) -> bool:
 # Allowed bet timeframes in seconds (kept short for jam-paced iteration).
 ALLOWED_TIMEFRAMES_S: tuple[int, ...] = (60, 300, 3600)
 
+# The stake buttons, before any STAKE_MULT scaling: $1 / $10 / $50 / $100.
+# Server-side and canonical -- see chip_ladder_cents for why the client can't
+# own this list.
+STAKE_CHIPS_CENTS: tuple[int, ...] = (1_00, 10_00, 50_00, 100_00)
+
 
 # ---------------------------------------------------------------------------
 # Bet sizing formulas
 # ---------------------------------------------------------------------------
 
 
-def max_bet_cents(balance_cents: int) -> int:
-    """Largest stake ($Y) allowed for the current balance."""
-    return max(econ.MIN_BET_CENTS, int(balance_cents * econ.MAX_BET_FRACTION))
+def max_bet_cents(balance_cents: int, stake_mult: float = 1.0) -> int:
+    """Largest stake ($Y) allowed for the current balance.
+
+    ``stake_mult`` comes from STAKE_MULT items and raises the cap by the same
+    factor it raises the chips (see chip_ladder_cents) -- otherwise the top
+    rungs of a boosted ladder would all sit above the cap and grey out, making
+    the item weaker the stronger it got.
+    """
+    return max(econ.MIN_BET_CENTS, int(balance_cents * econ.MAX_BET_FRACTION * stake_mult))
+
+
+def stake_multiplier(effects: Sequence[tuple[ItemEffect, float]]) -> float:
+    """How much bigger this player's stakes are, from STAKE_MULT items.
+
+    Magnitude is the bonus fraction, matching every other effect, so 1.0 means
+    double and two of them stack before hitting the cap.
+    """
+    total = sum(m for effect, m in effects if effect is ItemEffect.STAKE_MULT)
+    return 1.0 + min(total, econ.STAKE_MULT_CAP)
+
+
+def chip_ladder_cents(
+    effects: Sequence[tuple[ItemEffect, float]], balance_cents: int
+) -> list[int]:
+    """The stake buttons this player sees, in cents.
+
+    Server-canonical: the client renders whatever this returns and posts one of
+    these values back. It has to be canonical because all-in deliberately
+    overrides max_bet_cents, so "any stake at or above the balance goes all in"
+    would let a client bypass the cap entirely by posting a huge number.
+    """
+    mult = stake_multiplier(effects)
+    return [int(chip * mult) for chip in STAKE_CHIPS_CENTS]
+
+
+def effective_stake_cents(chip_cents: int, balance_cents: int) -> int:
+    """What a chip actually commits: itself, or the whole wallet if it exceeds it.
+
+    A chip above the balance goes all in rather than being refused -- the same
+    anti-softlock doctrine as min_bet_cents' "last call", generalised so that no
+    chip on the board is ever dead. Deliberately overrides max_bet_cents, which
+    is why the chip must have come from chip_ladder_cents.
+    """
+    return min(chip_cents, balance_cents)
 
 
 def beer_cents(balance_cents: int) -> int:
@@ -223,9 +315,28 @@ def min_bet_cents(balance_cents: int) -> int:
     return econ.MIN_BET_CENTS
 
 
-def is_valid_stake(stake_cents: int, balance_cents: int) -> bool:
+def is_valid_stake(
+    stake_cents: int,
+    balance_cents: int,
+    effects: Sequence[tuple[ItemEffect, float]] = (),
+) -> bool:
+    """Is this a stake the player could actually have clicked?
+
+    Two ways to be legal: an ordinary stake inside the cap, or an all-in -- but
+    all-in only counts when some chip on this player's ladder is at or above the
+    balance. Without that second clause "stake == balance" would be a blanket
+    exemption from MAX_BET_FRACTION that any client could claim.
+    """
     lower = min_bet_cents(balance_cents)
-    return lower <= stake_cents <= min(balance_cents, max_bet_cents(balance_cents))
+    if stake_cents < lower:
+        return False
+
+    ladder = chip_ladder_cents(effects, balance_cents)
+    if stake_cents == balance_cents and any(chip >= balance_cents for chip in ladder):
+        return True
+
+    cap = min(balance_cents, max_bet_cents(balance_cents, stake_multiplier(effects)))
+    return stake_cents <= cap and stake_cents in ladder
 
 
 # ---------------------------------------------------------------------------
@@ -284,7 +395,42 @@ class PenaltyBreakdown:
     chaos_mult: float
     mercy_mult: float
     volatility_mult: float
+    item_mult: float
     total_penalty_cents: int
+
+
+def item_loss_multiplier(effects: Sequence[tuple[ItemEffect, float]]) -> float:
+    """The LOSS_MULT term of the penalty stack: one more additive multiplier."""
+    total = sum(m for effect, m in effects if effect is ItemEffect.LOSS_MULT)
+    return min(total, econ.ITEM_LOSS_MULT_CAP)
+
+
+def win_dampen_factor(effects: Sequence[tuple[ItemEffect, float]]) -> float:
+    """Fraction of a winning GAIN that survives. 0.5 magnitude -> half the gain.
+
+    Applied to the gain only, never the returned stake, so a dampened win can
+    never become a net loss. The cap keeps the factor above zero: if a win could
+    gain nothing, the punishing outcome would be free and the market would lose
+    its only source of pressure.
+    """
+    total = sum(m for effect, m in effects if effect is ItemEffect.WIN_DAMPEN)
+    return 1.0 - min(total, econ.WIN_DAMPEN_CAP)
+
+
+def dampened_payout_cents(
+    payout_cents: int, stake_cents: int, effects: Sequence[tuple[ItemEffect, float]]
+) -> int:
+    """Apply WIN_DAMPEN to a casino payout, cutting only the profit.
+
+    The casino charges the stake up front and credits the gross payout back, so
+    the profit is payout - stake. Dampening the gross would take money the
+    player never won; dampening the profit matches the market's behaviour, and
+    stops the item being dodged by switching machines.
+    """
+    if payout_cents <= stake_cents:
+        return payout_cents
+    profit = payout_cents - stake_cents
+    return stake_cents + int(profit * win_dampen_factor(effects))
 
 
 def compute_loss_penalty(
@@ -292,12 +438,13 @@ def compute_loss_penalty(
     balance_cents: int,
     kind: TickerKind,
     same_direction_ratio: float,
+    effects: Sequence[tuple[ItemEffect, float]] = (),
     rng: random.Random | None = None,
 ) -> PenaltyBreakdown:
     """Compose the full dynamic penalty stack for a LOST market bet.
 
     The player loses the stake (handled by the caller) PLUS this extra penalty.
-    Extra penalty = base_penalty * (1 + crowd + chaos + mercy + volatility),
+    Extra penalty = base_penalty * (1 + crowd + chaos + mercy + volatility + items),
     floored at 0 so chaos relief can't turn a loss into a gain.
     """
     base = int(stake_cents * econ.BASE_LOSS_PENALTY)
@@ -305,8 +452,9 @@ def compute_loss_penalty(
     chaos = chaos_penalty(rng)
     mercy = mercy_multiplier(balance_cents)
     vol = volatility_penalty(kind)
+    items = item_loss_multiplier(effects)
 
-    multiplier = max(0.0, 1.0 + crowd + chaos + mercy + vol)
+    multiplier = max(0.0, 1.0 + crowd + chaos + mercy + vol + items)
     total = int(base * multiplier)
     return PenaltyBreakdown(
         base_penalty_cents=base,
@@ -314,6 +462,7 @@ def compute_loss_penalty(
         chaos_mult=chaos,
         mercy_mult=mercy,
         volatility_mult=vol,
+        item_mult=items,
         total_penalty_cents=total,
     )
 
@@ -332,8 +481,34 @@ class MarketResolution:
     penalty: PenaltyBreakdown | None
 
 
-def direction_from_prices(start_price: float, end_price: float) -> Direction:
-    """UP if the price rose (or was flat), else DOWN."""
+def anti_luck_margin(effects: Sequence[tuple[ItemEffect, float]]) -> float:
+    """The ANTI_LUCK deadband for a player holding `effects`, as a price fraction.
+
+    Charms stack additively and the total is capped, so a hoard bends the odds
+    without turning every bet into a guaranteed loss.
+    """
+    total = sum(m for effect, m in effects if effect is ItemEffect.ANTI_LUCK)
+    return min(total * econ.ANTI_LUCK_MARGIN_PER_MAGNITUDE, econ.ANTI_LUCK_MARGIN_CAP)
+
+
+def direction_from_prices(
+    start_price: float,
+    end_price: float,
+    anti_luck_margin: float = 0.0,
+    bet_direction: Direction | None = None,
+) -> Direction:
+    """UP if the price rose (or was flat), else DOWN.
+
+    `anti_luck_margin` is the ANTI_LUCK deadband, applied AGAINST the player's
+    own call: the move only counts as a hit if it cleared `start_price` by the
+    margin. Inside the band the bet reads as a miss -- a LOSS, which in this
+    game is the outcome the player wants. A margin of 0.0 (the default, and the
+    case for a player holding no charms) reproduces the bare comparison.
+    """
+    if bet_direction is Direction.UP and end_price < start_price * (1.0 + anti_luck_margin):
+        return Direction.DOWN
+    if bet_direction is Direction.DOWN and end_price > start_price * (1.0 - anti_luck_margin):
+        return Direction.UP
     return Direction.UP if end_price >= start_price else Direction.DOWN
 
 
@@ -346,6 +521,8 @@ def resolve_market_bet(
     end_price: float,
     kind: TickerKind,
     same_direction_ratio: float,
+    anti_luck_margin: float = 0.0,
+    effects: Sequence[tuple[ItemEffect, float]] = (),
     rng: random.Random | None = None,
 ) -> MarketResolution:
     """Resolve a timed market bet into a signed wallet delta.
@@ -353,12 +530,19 @@ def resolve_market_bet(
     WIN  (direction matches actual move): balance += stake * (WIN_MULTIPLIER - 1)
          i.e. the stake doubles. This is the *undesirable* outcome.
     LOSS (direction wrong): balance -= stake + dynamic penalty.
+
+    `anti_luck_margin` is the player's ANTI_LUCK deadband (see the function of
+    the same name); it can only ever turn a WIN into a LOSS, never the reverse.
     """
-    actual = direction_from_prices(start_price, end_price)
+    actual = direction_from_prices(
+        start_price, end_price, anti_luck_margin=anti_luck_margin, bet_direction=direction
+    )
     won = direction == actual
 
     if won:
-        gain = int(stake_cents * (econ.WIN_MULTIPLIER - 1.0))
+        # WIN_DAMPEN cuts the gain only -- the stake still comes back whole, so
+        # a dampened win can never turn into a net loss.
+        gain = int(stake_cents * (econ.WIN_MULTIPLIER - 1.0) * win_dampen_factor(effects))
         return MarketResolution(
             won=True,
             balance_delta_cents=+gain,
@@ -372,6 +556,7 @@ def resolve_market_bet(
         balance_cents=balance_cents,
         kind=kind,
         same_direction_ratio=same_direction_ratio,
+        effects=effects,
         rng=rng,
     )
     total_loss = stake_cents + breakdown.total_penalty_cents
@@ -389,8 +574,25 @@ def resolve_market_bet(
 # ---------------------------------------------------------------------------
 
 
+def item_stake_gate_cents(rarity: ItemRarity, balance_cents: int) -> int:
+    """Minimum stake that QUALIFIES a losing bet for an item of this rarity.
+
+    Risk buys rarity -- the same idea ITEM_DROP_RISK_BONUS encoded as a hidden
+    roll, made visible and deterministic. Lose below the gate and it is just an
+    ordinary loss. Capped at the wallet so going all in always clears every
+    gate, the same anti-softlock doctrine as min_bet_cents' "last call".
+    """
+    fraction = ITEM_STAKE_GATE_FRACTIONS[rarity]
+    return min(balance_cents, int(balance_cents * fraction))
+
+
 def item_drop_chance(stake_cents: int, balance_cents: int) -> float:
-    """Chance a losing bet drops a rare item, scaled by how risky the bet was."""
+    """Chance a losing bet drops a rare item, scaled by how risky the bet was.
+
+    NOTE: superseded on the market path, where the reward is pre-rolled per
+    ticker and granted with certainty (see modules/market/offers.py). Kept for
+    the casino path and because the odds curve is still the documented one.
+    """
     risk = min(max(stake_cents / max(balance_cents, 1), 0.0), 1.0)
     return min(1.0, econ.ITEM_DROP_BASE_RATE + risk * econ.ITEM_DROP_RISK_BONUS)
 
@@ -400,6 +602,16 @@ def roll_item_drop(
 ) -> bool:
     r = rng or random
     return r.random() < item_drop_chance(stake_cents, balance_cents)
+
+
+# Fraction of the wallet a losing bet must stake to qualify for each rarity.
+# LEGENDARY sits exactly on MAX_BET_FRACTION: the largest bet normally allowed.
+ITEM_STAKE_GATE_FRACTIONS: dict[ItemRarity, float] = {
+    ItemRarity.COMMON: 0.01,
+    ItemRarity.RARE: 0.05,
+    ItemRarity.EPIC: 0.10,
+    ItemRarity.LEGENDARY: 0.25,
+}
 
 
 # Rarity weights used when a drop occurs (higher = more common).

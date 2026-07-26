@@ -4,6 +4,7 @@ import type {
   MarketBet,
   MarketDirection,
   MarketTicker,
+  Offer,
   SlotInfo,
   SlotSpinResult,
   TokenResult,
@@ -69,6 +70,12 @@ export const api = {
   slotsInfo: () => request<SlotInfo>('/casino/slots/info'),
   buyBeer: () => request<BeerResult>('/beer/buy', { method: 'POST', auth: true }),
   marketTickers: () => request<MarketTicker[]>('/market/tickers'),
+  /**
+   * Every curated ticker plus the item bounty pinned to it, the player's chip
+   * ladder and the stake gate — one request for the whole grid rather than
+   * fifteen. Re-reading never re-rolls an offer.
+   */
+  marketOffers: () => request<Offer[]>('/market/offers', { auth: true }),
   marketPlaceBet: (ticker: string, direction: MarketDirection, stakeCents: number, timeframeS: number) =>
     request<MarketBet>('/market/bets', {
       method: 'POST',

@@ -1,35 +1,35 @@
 // Market screen, built as a plain DOM overlay (not Phaser game objects) —
 // mirrors the relationship `authForm.ts` has with SlotsScene, except this
 // panel is persistent for as long as the Market scene is active rather than a
-// modal. DOM (not canvas) because most rows embed a live TradingView iframe;
-// keeping 13 of those glued to Phaser-rendered rows across canvas
-// scale/resize would be far more fragile than a normal scrollable <div> list.
+// modal. DOM (not canvas) because most tiles embed a live TradingView iframe;
+// keeping 15 of those glued to Phaser-rendered rows across canvas
+// scale/resize would be far more fragile than a normal scrollable <div>.
+//
+// Laid out as a grid of always-open tiles rather than an expanding drawer: the
+// point of pre-rolled offers is that you can SCAN fifteen bounties and pick one,
+// which a one-at-a-time drawer makes impossible.
 import { api, ApiError } from '../core/api';
 import { session } from '../core/session';
 import { dollars } from '../core/money';
+import { itemIconUrl } from '../core/itemArt';
 import { css, font, outcomeCss } from '../core/theme';
 import { mountMiniChart } from '../core/tradingview';
-import type { MarketBet, MarketDirection, MarketTicker } from '../core/types';
+import type { MarketBet, MarketDirection, Offer } from '../core/types';
 
-const STAKE_CHIPS = [100, 1000, 5000, 10000]; // cents — matches SlotsScene's chips
 const TIMEFRAMES: { s: number; label: string }[] = [
-  { s: 60, label: '1 MIN' },
-  { s: 300, label: '5 MIN' },
-  { s: 3600, label: '1 HOUR' },
-];
-const SECTIONS: { title: string; symbols: string[] }[] = [
-  { title: 'MAGNIFICENT 7', symbols: ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'META', 'TSLA'] },
-  { title: 'INDEX ETFS', symbols: ['SPY', 'QQQ'] },
-  { title: 'INTERNATIONAL', symbols: ['ASML.AS', 'AZN.L', 'BHP.AX', '9988.HK'] },
-  { title: 'CRYPTO', symbols: ['BTC-USD', 'ETH-USD'] },
+  { s: 60, label: '1m' },
+  { s: 300, label: '5m' },
+  { s: 3600, label: '1h' },
 ];
 
-const TICKER_POLL_MS = 10_000;
+const OFFERS_POLL_MS = 10_000;
 const BETS_POLL_MS = 5_000;
 const COUNTDOWN_TICK_MS = 1_000;
 
 function fmtPrice(p: number | null): string {
-  return p === null ? '—' : p.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return p === null
+    ? '—'
+    : p.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -51,316 +51,318 @@ function makeButton(label: string, cssText: string, onClick: () => void): HTMLBu
   return btn;
 }
 
-interface RowState {
-  ticker: MarketTicker;
-  rowEl: HTMLElement;
-  nameEl: HTMLElement;
+/**
+ * open/closed is plumbing, not an outcome, so it stays gold/cream. Never
+ * reward/punish — those are reserved for which way the money moved.
+ */
+function badgeStyle(open: boolean): string {
+  return (
+    'font-size:11px;padding:2px 6px;border-radius:5px;' +
+    `color:${open ? css.gold : css.creamDim};` +
+    `border:1px solid ${open ? css.goldDim : css.creamDim};`
+  );
+}
+
+interface TileState {
+  offer: Offer;
+  root: HTMLElement;
   priceEl: HTMLElement;
   badgeEl: HTMLElement;
-  drawerEl: HTMLElement;
+  chipsEl: HTMLElement;
+  gateEl: HTMLElement;
+  itemEl: HTMLElement;
+  downBtn: HTMLButtonElement;
+  upBtn: HTMLButtonElement;
   chartTeardown: () => void;
-  expanded: boolean;
+  selectedChip: number | null;
 }
 
-export interface MarketPanelEffects {
-  onWon(): void; // BAD outcome for the player — glitch/punish juice
-  onLost(): void; // GOOD outcome for the player — reward juice
-}
-
-export function mountMarketPanel(onBack: () => void, effects: MarketPanelEffects): () => void {
+/**
+ * Settle juice is no longer this panel's job: core/betWatcher owns the status
+ * diff and fires wherever the player is standing, rather than dying with this
+ * scene. The panel now only polls to keep its own display current.
+ */
+export function mountMarketPanel(onBack: () => void): () => void {
   let alive = true;
+  let horizonS = TIMEFRAMES[0].s;
 
   const wrap = el('div',
     `position:fixed;inset:0;overflow-y:auto;background:${css.feltEdge};color:${css.cream};` +
     `font-family:${font.ui};padding:20px 20px 60px;box-sizing:border-box;`);
 
-  const header = el('div', 'display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;');
-  header.append(
-    el('div', `color:${css.gold};font-family:${font.display};font-size:30px;font-weight:700;`, 'MARKET'),
-    makeButton('← BACK',
-      `background:${css.panel};border:1px solid ${css.goldDim};color:${css.cream};padding:10px 18px;`,
-      () => onBack()),
-  );
-  wrap.append(header);
+  // --- header ------------------------------------------------------------
 
-  const balanceEl = el('div', `color:${css.creamDim};font-size:15px;margin-bottom:20px;`);
-  wrap.append(balanceEl);
-  const renderBalance = (): void => {
-    balanceEl.textContent = `balance: ${dollars(session.user?.balance_cents ?? 0)}`;
-  };
-  renderBalance();
-  const unsubBalance = session.onChange(renderBalance);
+  const header = el('div',
+    'display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:16px;');
+  header.appendChild(makeButton('← BACK',
+    `background:transparent;color:${css.creamDim};border:1px solid ${css.goldDim};`, onBack));
+  header.appendChild(el('div',
+    `font-family:${font.display};font-size:26px;color:${css.gold};letter-spacing:2px;`,
+    'THE MARKET'));
 
-  const pendingTitle = el('div', `color:${css.gold};font-size:14px;font-weight:600;letter-spacing:3px;margin-bottom:8px;display:none;`, 'PENDING BETS');
-  const pendingList = el('div', 'display:flex;flex-direction:column;gap:8px;margin-bottom:20px;');
-  wrap.append(pendingTitle, pendingList);
+  // Pending bets live top-right, out of the grid's way.
+  const pendingBox = el('div',
+    `min-width:190px;border:1px solid ${css.goldDim};border-radius:10px;padding:8px 10px;` +
+    `background:${css.cardFace};`);
+  header.appendChild(pendingBox);
+  wrap.appendChild(header);
 
-  const statusEl = el('div', `color:${css.creamDim};font-size:14px;padding:20px 0;`, 'loading tickers…');
-  const sectionsEl = el('div', 'display:flex;flex-direction:column;gap:24px;');
-  wrap.append(statusEl, sectionsEl);
+  wrap.appendChild(el('div',
+    `color:${css.creamDim};font-size:13px;margin-bottom:14px;`,
+    'lose the bet, take the prize.'));
 
-  document.body.append(wrap);
+  // --- horizon ------------------------------------------------------------
+  // One selector for the whole grid rather than a row per tile: it keeps each
+  // tile short, and it composes with direction-as-commit — set it once, then
+  // rapid-fire across the grid.
 
-  // --- ticker rows -----------------------------------------------------
-
-  const rows = new Map<string, RowState>();
-  let expandedSymbol: string | null = null;
-
-  function badgeStyle(open: boolean): string {
-    // Open/closed is plumbing, not an outcome — gold, not reward-gold semantics.
-    return open
-      ? `color:${css.gold};border:1px solid ${css.goldDim};`
-      : `color:${css.creamDim};border:1px solid ${css.creamDim};`;
+  const horizonRow = el('div',
+    'display:flex;align-items:center;gap:8px;margin-bottom:16px;');
+  horizonRow.appendChild(el('span', `color:${css.creamDim};font-size:12px;`, 'HORIZON'));
+  const horizonBtns = new Map<number, HTMLButtonElement>();
+  for (const tf of TIMEFRAMES) {
+    const b = makeButton(tf.label, '', () => {
+      horizonS = tf.s;
+      paintHorizon();
+      tiles.forEach(paintDirections);
+    });
+    horizonBtns.set(tf.s, b);
+    horizonRow.appendChild(b);
   }
+  wrap.appendChild(horizonRow);
 
-  function collapseRow(row: RowState): void {
-    row.expanded = false;
-    row.drawerEl.style.display = 'none';
-    row.drawerEl.innerHTML = '';
-  }
-
-  function expandRow(row: RowState): void {
-    if (expandedSymbol && expandedSymbol !== row.ticker.symbol) {
-      const prev = rows.get(expandedSymbol);
-      if (prev) collapseRow(prev);
+  function paintHorizon(): void {
+    for (const [s, b] of horizonBtns) {
+      const on = s === horizonS;
+      b.style.background = on ? css.gold : 'transparent';
+      b.style.color = on ? css.feltEdge : css.creamDim;
+      b.style.border = `1px solid ${on ? css.gold : css.goldDim}`;
     }
-    expandedSymbol = row.ticker.symbol;
-    row.expanded = true;
-    row.drawerEl.style.display = 'block';
-    buildDrawer(row);
+  }
+  paintHorizon();
+
+  // --- grid ---------------------------------------------------------------
+
+  const openHeading = el('div',
+    `color:${css.gold};font-size:13px;letter-spacing:2px;margin:6px 0 10px;`, 'OPEN');
+  const openGrid = el('div',
+    'display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px;');
+  const closedHeading = el('div',
+    `color:${css.creamDim};font-size:13px;letter-spacing:2px;margin:22px 0 10px;`, 'CLOSED');
+  const closedGrid = el('div',
+    'display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px;');
+  wrap.append(openHeading, openGrid, closedHeading, closedGrid);
+
+  const tiles = new Map<string, TileState>();
+  const errorEl = el('div', `color:${outcomeCss.punish};font-size:13px;margin-top:12px;`);
+  wrap.appendChild(errorEl);
+
+  function buildTile(offer: Offer, chartSlot: number): TileState {
+    const root = el('div',
+      `border:1px solid ${css.goldDim};border-radius:12px;padding:12px;` +
+      `background:${css.cardFace};display:flex;flex-direction:column;gap:8px;`);
+
+    const top = el('div', 'display:flex;align-items:center;justify-content:space-between;gap:8px;');
+    top.appendChild(el('div',
+      `font-family:${font.display};font-size:17px;color:${css.cream};`, offer.symbol));
+    const priceEl = el('div', `font-size:15px;color:${css.cream};`, fmtPrice(offer.last_price));
+    top.appendChild(priceEl);
+    root.appendChild(top);
+
+    const chartHost = el('div', 'height:90px;border-radius:8px;overflow:hidden;');
+    root.appendChild(chartHost);
+    const chartTeardown = mountMiniChart(chartHost, offer.symbol, chartSlot);
+
+    // One row carrying the bounty and the market state; the icon does the
+    // heavy lifting so the tile never needs a rarity label.
+    const midRow = el('div', 'display:flex;align-items:center;justify-content:space-between;gap:8px;');
+    const itemEl = el('div', 'display:flex;align-items:center;gap:6px;min-height:34px;');
+    const badgeEl = el('div', badgeStyle(offer.is_open), offer.is_open ? 'OPEN' : 'CLOSED');
+    midRow.append(itemEl, badgeEl);
+    root.appendChild(midRow);
+
+    const chipsEl = el('div', 'display:flex;flex-wrap:wrap;gap:6px;');
+    root.appendChild(chipsEl);
+
+    const gateEl = el('div', `font-size:11px;color:${css.creamDim};min-height:14px;`);
+    root.appendChild(gateEl);
+
+    const dirRow = el('div', 'display:flex;gap:8px;');
+    const downBtn = makeButton('DOWN', 'flex:1;', () => void commit(offer.symbol, 'DOWN'));
+    const upBtn = makeButton('UP', 'flex:1;', () => void commit(offer.symbol, 'UP'));
+    dirRow.append(downBtn, upBtn);
+    root.appendChild(dirRow);
+
+    return {
+      offer, root, priceEl, badgeEl, chipsEl, gateEl, itemEl,
+      downBtn, upBtn, chartTeardown, selectedChip: null,
+    };
   }
 
-  function toggleRow(row: RowState): void {
-    if (row.expanded) collapseRow(row);
-    else expandRow(row);
-  }
+  function paintItem(tile: TileState): void {
+    const { itemEl, offer } = tile;
+    itemEl.replaceChildren();
 
-  function buildDrawer(row: RowState): void {
-    row.drawerEl.innerHTML = '';
-    if (!row.ticker.is_open) {
-      row.drawerEl.append(el('div', `color:${css.creamDim};font-size:13px;padding:12px 0;`, 'market closed — betting disabled'));
+    if (!offer.reward_item) {
+      // An empty socket rather than nothing at all: a blank space reads as a
+      // rendering bug, a dimmed slot reads as "not this one".
+      const socket = el('div',
+        `width:30px;height:30px;border-radius:8px;border:1px dashed ${css.creamDim};opacity:0.35;`);
+      itemEl.appendChild(socket);
       return;
     }
 
-    let direction: MarketDirection = 'UP';
-    let stakeCents = STAKE_CHIPS[0];
-    let timeframeS = TIMEFRAMES[0].s;
-    const balance = session.user?.balance_cents ?? 0;
+    const img = document.createElement('img');
+    img.src = itemIconUrl(offer.reward_item.art_key, offer.reward_item.rarity);
+    img.alt = offer.reward_item.name;
+    // The alt text IS the fallback: if the icon failed to bake, the name still
+    // tells the player what the tile is worth.
+    img.title = `${offer.reward_item.name} (${offer.reward_item.rarity})`;
+    img.style.cssText = 'width:30px;height:30px;display:block;';
+    itemEl.appendChild(img);
 
-    const dirRow = el('div', 'display:flex;gap:8px;margin:10px 0 6px;');
-    const dirButtons: { dir: MarketDirection; btn: HTMLButtonElement }[] = [];
-    (['UP', 'DOWN'] as MarketDirection[]).forEach((d) => {
-      const btn = makeButton(d, '', () => {
-        direction = d;
-        dirButtons.forEach(({ dir, btn: b }) => setSelected(b, dir === direction));
-      });
-      dirButtons.push({ dir: d, btn });
-      dirRow.append(btn);
-    });
-    dirButtons.forEach(({ dir, btn }) => setSelected(btn, dir === direction));
+    const chasing = offer.pending_bet_id !== null;
+    itemEl.appendChild(el('div',
+      `font-size:11px;color:${chasing ? css.gold : css.creamDim};`,
+      chasing ? `chasing ${offer.reward_item.name}` : offer.reward_item.name));
+  }
 
-    const stakeRow = el('div', 'display:flex;gap:8px;margin:6px 0;flex-wrap:wrap;');
-    const stakeButtons: { cents: number; btn: HTMLButtonElement }[] = [];
-    STAKE_CHIPS.forEach((cents) => {
-      const btn = makeButton(`$${cents / 100}`, '', () => {
-        stakeCents = cents;
-        stakeButtons.forEach(({ cents: c, btn: b }) => setSelected(b, c === stakeCents));
-      });
-      btn.disabled = cents > balance;
-      if (btn.disabled) btn.style.opacity = '0.35';
-      stakeButtons.push({ cents, btn });
-      stakeRow.append(btn);
-    });
-    stakeButtons.forEach(({ cents, btn }) => setSelected(btn, cents === stakeCents));
+  function paintChips(tile: TileState): void {
+    const { chipsEl, offer } = tile;
+    chipsEl.replaceChildren();
+    const balance = session.displayBalanceCents;
+    const gate = offer.reward_stake_gate_cents ?? 0;
 
-    const tfRow = el('div', 'display:flex;gap:8px;margin:6px 0;');
-    const tfButtons: { s: number; btn: HTMLButtonElement }[] = [];
-    TIMEFRAMES.forEach(({ s, label }) => {
-      const btn = makeButton(label, '', () => {
-        timeframeS = s;
-        tfButtons.forEach(({ s: ts, btn: b }) => setSelected(b, ts === timeframeS));
-      });
-      tfButtons.push({ s, btn });
-      tfRow.append(btn);
-    });
-    tfButtons.forEach(({ s, btn }) => setSelected(btn, s === timeframeS));
-
-    const errorEl = el('div', `color:${css.redBright};font-size:13px;min-height:18px;margin-top:6px;`);
-    const confirmBtn = makeButton('PLACE BET',
-      `background:${css.gold};color:${css.ink};padding:10px 20px;margin-top:4px;`,
-      () => { void placeBet(); });
-
-    async function placeBet(): Promise<void> {
-      confirmBtn.disabled = true;
-      errorEl.textContent = '';
-      try {
-        await api.marketPlaceBet(row.ticker.symbol, direction, stakeCents, timeframeS);
-        if (!alive) return;
-        collapseRow(row);
-        void refreshBets();
-      } catch (e) {
-        if (!alive) return;
-        errorEl.textContent = e instanceof ApiError ? e.message : 'connection hiccup — try again';
-        confirmBtn.disabled = false;
-      }
+    for (const cents of offer.chips_cents) {
+      // No chip is ever disabled: one above the wallet goes all in. Disabling
+      // it would softlock a nearly-broke player out of the desperate play,
+      // which in this game is the CORRECT play.
+      const selected = tile.selectedChip === cents;
+      const belowGate = gate > 0 && Math.min(cents, balance) < gate;
+      const b = makeButton(dollars(cents),
+        `padding:6px 10px;font-size:12px;` +
+        `background:${selected ? css.gold : 'transparent'};` +
+        `color:${selected ? css.feltEdge : css.cream};` +
+        `border:1px solid ${selected ? css.gold : css.goldDim};` +
+        `opacity:${belowGate && !selected ? '0.55' : '1'};`,
+        () => {
+          tile.selectedChip = cents;
+          paintChips(tile);
+          paintDirections(tile);
+        });
+      chipsEl.appendChild(b);
     }
 
-    row.drawerEl.append(dirRow, stakeRow, tfRow, confirmBtn, errorEl);
+    tile.gateEl.textContent =
+      gate > 0 ? `${dollars(gate)}+ to qualify for the item` : '';
   }
 
-  function setSelected(btn: HTMLButtonElement, selected: boolean): void {
-    btn.style.background = selected ? css.gold : css.panel;
-    btn.style.color = selected ? css.ink : css.cream;
-    btn.style.border = `1px solid ${css.goldDim}`;
+  function paintDirections(tile: TileState): void {
+    const { offer, downBtn, upBtn } = tile;
+    const chip = tile.selectedChip;
+    const balance = session.displayBalanceCents;
+    const allIn = chip !== null && chip >= balance && balance > 0;
+    const label = TIMEFRAMES.find((t) => t.s === horizonS)?.label ?? '';
+    const enabled = chip !== null && offer.is_open && offer.pending_bet_id === null;
+
+    for (const [btn, dir] of [[downBtn, '↓'], [upBtn, '↑']] as const) {
+      // The button states every parameter of the bet it places, so
+      // direction-as-commit has no hidden state behind it.
+      btn.textContent = allIn
+        ? `ALL IN ${dir}`
+        : `${dir === '↑' ? 'UP' : 'DOWN'} · ${label}`;
+      btn.disabled = !enabled;
+      btn.style.cursor = enabled ? 'pointer' : 'not-allowed';
+      btn.style.opacity = enabled ? '1' : '0.4';
+      // All-in is irreversible and commits the whole wallet, so it announces
+      // itself in reward gold at the moment of the click.
+      btn.style.background = allIn ? css.gold : 'transparent';
+      btn.style.color = allIn ? css.feltEdge : css.cream;
+      btn.style.border = `1px solid ${allIn ? css.gold : css.goldDim}`;
+    }
   }
 
-  let chartSlot = 0;
-
-  function buildRow(container: HTMLElement, ticker: MarketTicker): RowState {
-    const rowEl = el('div', `background:${css.panel};border:1px solid ${css.goldDim}44;border-radius:12px;padding:14px 16px;`);
-    const headEl = el('div', 'display:flex;align-items:center;gap:12px;cursor:pointer;');
-    const nameEl = el('div', 'flex:1;font-size:15px;font-weight:bold;');
-    const priceEl = el('div', 'font-size:15px;color:#fff;min-width:90px;text-align:right;');
-    const badgeEl = el('div', 'font-size:11px;padding:3px 8px;border-radius:6px;');
-    headEl.append(nameEl, priceEl, badgeEl);
-
-    const chartEl = el('div', 'width:100%;height:160px;margin-top:10px;');
-    const drawerEl = el('div', 'display:none;');
-
-    rowEl.append(headEl, chartEl, drawerEl);
-    container.appendChild(rowEl);
-
-    const row: RowState = {
-      ticker, rowEl, nameEl, priceEl, badgeEl, drawerEl,
-      chartTeardown: mountMiniChart(chartEl, ticker.symbol, chartSlot++),
-      expanded: false,
-    };
-    headEl.addEventListener('click', () => toggleRow(row));
-    return row;
+  function paintTile(tile: TileState): void {
+    tile.priceEl.textContent = fmtPrice(tile.offer.last_price);
+    tile.badgeEl.textContent = tile.offer.is_open ? 'OPEN' : 'CLOSED';
+    tile.badgeEl.style.cssText = badgeStyle(tile.offer.is_open);
+    tile.root.style.opacity = tile.offer.is_open ? '1' : '0.45';
+    paintItem(tile);
+    paintChips(tile);
+    paintDirections(tile);
   }
 
-  function renderRowData(row: RowState): void {
-    row.nameEl.textContent = `${row.ticker.name} (${row.ticker.symbol})`;
-    row.priceEl.textContent = fmtPrice(row.ticker.last_price);
-    row.badgeEl.textContent = row.ticker.is_open ? 'OPEN' : 'CLOSED';
-    row.badgeEl.style.cssText = 'font-size:11px;padding:3px 8px;border-radius:6px;' + badgeStyle(row.ticker.is_open);
-  }
-
-  let tickersBuilt = false;
-  async function refreshTickers(): Promise<void> {
-    let list: MarketTicker[];
+  async function commit(symbol: string, direction: MarketDirection): Promise<void> {
+    const tile = tiles.get(symbol);
+    if (!tile || tile.selectedChip === null) return;
+    errorEl.textContent = '';
     try {
-      list = await api.marketTickers();
-    } catch {
-      if (!tickersBuilt) statusEl.textContent = 'could not reach the market — retrying…';
-      return; // transient — next poll will retry
-    }
-    if (!alive) return;
-    statusEl.style.display = 'none';
-    const bySymbol = new Map(list.map((t) => [t.symbol, t]));
-
-    if (!tickersBuilt) {
-      tickersBuilt = true;
-      for (const section of SECTIONS) {
-        const secEl = el('div', '');
-        secEl.append(el('div', `color:${css.gold};font-size:13px;font-weight:600;margin-bottom:10px;letter-spacing:4px;`, section.title));
-        const secRows = el('div', 'display:flex;flex-direction:column;gap:10px;');
-        secEl.append(secRows);
-        sectionsEl.append(secEl);
-
-        const inSection = section.symbols
-          .map((s) => bySymbol.get(s))
-          .filter((t): t is MarketTicker => t !== undefined)
-          .sort((a, b) => Number(b.is_open) - Number(a.is_open));
-        for (const t of inSection) {
-          const row = buildRow(secRows, t);
-          rows.set(t.symbol, row);
-          renderRowData(row);
-        }
-      }
-    } else {
-      for (const [symbol, row] of rows) {
-        const fresh = bySymbol.get(symbol);
-        if (!fresh) continue;
-        row.ticker = fresh;
-        renderRowData(row);
-      }
+      // The chip is posted as-is; the server clamps it to the wallet when it
+      // exceeds the balance (all-in) and rejects anything off the ladder.
+      await api.marketPlaceBet(symbol, direction, tile.selectedChip, horizonS);
+      tile.selectedChip = null;
+      await Promise.all([refreshOffers(), refreshBets()]);
+    } catch (err) {
+      errorEl.textContent =
+        err instanceof ApiError ? err.message : 'could not place that bet';
     }
   }
 
-  // --- pending bets ------------------------------------------------------
+  // --- pending bets -------------------------------------------------------
 
-  const knownStatus = new Map<string, string>();
   let pendingBets: MarketBet[] = [];
 
   function renderPendingList(): void {
-    pendingList.innerHTML = '';
-    pendingTitle.style.display = pendingBets.length ? 'block' : 'none';
-    for (const bet of pendingBets) {
-      const rowEl = el('div', `background:${css.panel};border:1px solid ${css.goldDim}44;border-radius:10px;padding:10px 14px;font-size:13px;`);
-      rowEl.dataset.betId = bet.id;
-
-      const topLine = el('div', 'display:flex;align-items:center;gap:12px;');
-      const timerEl = el('div', `color:${css.gold};min-width:70px;text-align:right;`);
-      timerEl.dataset.role = 'timer';
-      topLine.append(
-        el('div', 'flex:1;', `${bet.ticker} · ${bet.direction} · ${dollars(bet.stake_cents)}`),
-        timerEl,
-      );
-
-      const priceLine = el('div',
-        `display:flex;align-items:center;gap:8px;margin-top:6px;font-size:12px;color:${css.creamDim};`);
-      const nowEl = el('span', 'font-weight:bold;');
-      nowEl.dataset.role = 'now';
-      const statusEl = el('span', '');
-      statusEl.dataset.role = 'status';
-      priceLine.append(
-        el('span', '', `start ${fmtPrice(bet.start_price)} →`),
-        nowEl,
-        statusEl,
-      );
-
-      rowEl.append(topLine, priceLine);
-      pendingList.append(rowEl);
+    pendingBox.replaceChildren();
+    pendingBox.appendChild(el('div',
+      `font-size:11px;color:${css.creamDim};letter-spacing:1px;margin-bottom:4px;`,
+      'PENDING BETS'));
+    if (pendingBets.length === 0) {
+      pendingBox.appendChild(el('div', `font-size:12px;color:${css.creamDim};`, 'none'));
+      return;
     }
-    tickCountdowns();
+    for (const bet of pendingBets) {
+      const row = el('div', 'display:flex;justify-content:space-between;gap:8px;font-size:12px;');
+      row.appendChild(el('span', `color:${css.cream};`, `${bet.ticker} ${bet.direction}`));
+      row.appendChild(el('span', `color:${css.creamDim};`, countdown(bet)));
+      pendingBox.appendChild(row);
+    }
   }
 
-  // Colours match the inverted win/loss juice used elsewhere (SlotsScene,
-  // MarketScene effects): gold = good for the player (heading to a LOSS),
-  // red = bad for the player (heading to a WIN). See theme.outcome.
-  function tickCountdowns(): void {
-    const now = Date.now();
-    for (const bet of pendingBets) {
-      const rowEl = pendingList.querySelector<HTMLElement>(`[data-bet-id="${bet.id}"]`);
-      if (!rowEl) continue;
+  function countdown(bet: MarketBet): string {
+    if (!bet.resolve_at) return '';
+    const left = Math.max(0, new Date(bet.resolve_at).getTime() - Date.now());
+    return `${Math.ceil(left / 1000)}s`;
+  }
 
-      const timerEl = rowEl.querySelector<HTMLElement>('[data-role="timer"]');
-      if (timerEl && bet.resolve_at) {
-        const remainingMs = new Date(bet.resolve_at).getTime() - now;
-        timerEl.textContent = remainingMs > 0 ? `${Math.ceil(remainingMs / 1000)}s` : 'resolving…';
-      }
+  // --- polling ------------------------------------------------------------
 
-      const nowEl = rowEl.querySelector<HTMLElement>('[data-role="now"]');
-      const statusEl = rowEl.querySelector<HTMLElement>('[data-role="status"]');
-      if (!nowEl || !statusEl) continue;
-
-      const currentPrice = bet.ticker ? rows.get(bet.ticker)?.ticker.last_price ?? null : null;
-      if (currentPrice === null || bet.start_price === null) {
-        nowEl.textContent = '—';
-        nowEl.style.color = '';
-        statusEl.textContent = '';
-        continue;
-      }
-
-      nowEl.textContent = fmtPrice(currentPrice);
-      const actualDirection = currentPrice >= bet.start_price ? 'UP' : 'DOWN';
-      const onTrackToWin = bet.direction === actualDirection;
-      const color = onTrackToWin ? outcomeCss.punish : outcomeCss.reward;
-      nowEl.style.color = color;
-      statusEl.textContent = onTrackToWin ? 'WINNING (bad)' : 'LOSING (good)';
-      statusEl.style.cssText = `font-size:11px;padding:2px 6px;border-radius:5px;color:${color};border:1px solid ${color};`;
+  async function refreshOffers(): Promise<void> {
+    let list: Offer[];
+    try {
+      list = await api.marketOffers();
+    } catch {
+      return; // keep the last good grid rather than blanking it
     }
+    if (!alive) return;
+
+    let slot = 0;
+    for (const offer of list) {
+      let tile = tiles.get(offer.symbol);
+      if (!tile) {
+        tile = buildTile(offer, slot);
+        tiles.set(offer.symbol, tile);
+      }
+      tile.offer = offer;
+      slot += 1;
+    }
+    // Re-home tiles so open ones group above the greyed-out closed ones.
+    for (const offer of list) {
+      const tile = tiles.get(offer.symbol)!;
+      (offer.is_open ? openGrid : closedGrid).appendChild(tile.root);
+      paintTile(tile);
+    }
+    closedHeading.style.display = list.some((o) => !o.is_open) ? '' : 'none';
   }
 
   async function refreshBets(): Promise<void> {
@@ -371,35 +373,35 @@ export function mountMarketPanel(onBack: () => void, effects: MarketPanelEffects
       return;
     }
     if (!alive) return;
-
-    for (const bet of list) {
-      const prev = knownStatus.get(bet.id);
-      if (prev === 'PENDING' && bet.status !== 'PENDING') {
-        if (bet.status === 'WON') effects.onWon();
-        else if (bet.status === 'LOST') effects.onLost();
-        api.getMe().then((u) => { if (alive) session.setUser(u); }).catch(() => { /* wallet stays stale until next resolve */ });
-      }
-      knownStatus.set(bet.id, bet.status);
-    }
+    // No status diff here any more. It used to live in this panel, which meant
+    // it died on scene shutdown and only fired if the player happened to still
+    // be looking at the market. core/betWatcher owns that now.
     pendingBets = list.filter((b) => b.status === 'PENDING');
     renderPendingList();
   }
 
-  // --- polling -------------------------------------------------------
-
-  void refreshTickers();
+  renderPendingList();
+  void refreshOffers();
   void refreshBets();
-  const tickerInterval = window.setInterval(() => void refreshTickers(), TICKER_POLL_MS);
+  const offersInterval = window.setInterval(() => void refreshOffers(), OFFERS_POLL_MS);
   const betsInterval = window.setInterval(() => void refreshBets(), BETS_POLL_MS);
-  const countdownInterval = window.setInterval(tickCountdowns, COUNTDOWN_TICK_MS);
+  const countdownInterval = window.setInterval(renderPendingList, COUNTDOWN_TICK_MS);
+  // The drain moves the balance continuously, which changes which chips are
+  // all-in and which clear the gate.
+  const unsubBalance = session.onChange(() => tiles.forEach((t) => {
+    paintChips(t);
+    paintDirections(t);
+  }));
+
+  document.body.appendChild(wrap);
 
   return () => {
     alive = false;
-    window.clearInterval(tickerInterval);
+    window.clearInterval(offersInterval);
     window.clearInterval(betsInterval);
     window.clearInterval(countdownInterval);
     unsubBalance();
-    for (const row of rows.values()) row.chartTeardown();
+    for (const tile of tiles.values()) tile.chartTeardown();
     wrap.remove();
   };
 }

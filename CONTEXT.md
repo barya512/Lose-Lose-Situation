@@ -47,6 +47,19 @@ prompt ("choose your poison"), and the scene is `Poison`.
 **Stake** — the amount of money committed to one play. Never "bet amount", which
 collides with **bet** above.
 
+**Offer** — one ticker's tile in the market, and the item bounty pinned to it.
+Not a **bet** (that word belongs to the poison screen) and not a **card** (that
+is `ui/Card.ts`, a machine). An offer names its prize *before* a stake is
+committed, is consumed when a bet takes it, and re-rolls when that bet resolves.
+
+**Chip** — one stake button on the server-published ladder. A chip is not yet a
+stake: one larger than the wallet commits the whole wallet instead of being
+refused (see **all-in**).
+
+**All-in** — clicking a chip the wallet can't cover, which stakes everything and
+is legal. Distinct from **last call** below: all-in is a *choice* the player
+makes with a chip still on the board, last call is a state the wallet is in.
+
 ## Money
 
 **Wallet** — the player's balance. Always integer **cents** in transit and in
