@@ -25,6 +25,10 @@ _connection: aio_pika.abc.AbstractRobustConnection | None = None
 async def get_connection() -> aio_pika.abc.AbstractRobustConnection:
     global _connection
     if _connection is None or _connection.is_closed:
+        log.info(
+            "Connecting to RabbitMQ: host=%r user=%r (from RABBITMQ_HOST/RABBITMQ_USER)",
+            settings.rabbitmq_host, settings.rabbitmq_user,
+        )
         _connection = await aio_pika.connect_robust(settings.rabbitmq_url)
     return _connection
 
