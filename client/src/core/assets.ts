@@ -50,6 +50,8 @@ export const TEX = {
   cardSlots: 'ui.card.slots',
   // Slot machine chrome.
   slotFrame: 'ui.slotframe', // nine-slice source (24px corner insets)
+  slotBase: 'ui.slotbase', // shallow nine-slice tray under the reel window (12px corner insets)
+  slotPillar: 'ui.slotpillar', // fixed-size cabinet pillar (never stretched, so no nine-slice)
   lever: 'ui.lever',
   // Slot "changing image" outcome reaction.
   reactionNeutral: 'slot.reaction.neutral',
@@ -70,6 +72,9 @@ export const MUSIC = {
  * carries the `bake` oversizing that authored units hide.
  */
 export const SLOT_FRAME_INSET = 24 * RENDER_SCALE;
+
+/** Corner inset for the {@link TEX.slotBase} nine-slice — see {@link SLOT_FRAME_INSET}. */
+export const SLOT_BASE_INSET = 12 * RENDER_SCALE;
 
 /** Source size of the baked card face; Card scales this down to taste. */
 const CARD_SOURCE = { width: 300, height: 420 } as const;
@@ -519,6 +524,28 @@ function bakeUiTextures(scene: Phaser.Scene): void {
     ctx.stroke();
   });
 
+  // A shallow recessed tray beneath the reel window — darker and dimmer than
+  // TEX.slotFrame so a short plate still reads as a foot/pedestal rather than
+  // a second, empty reel window.
+  bake(scene, TEX.slotBase, 48, 48, (ctx, w, h) => {
+    const grad = ctx.createLinearGradient(0, 0, 0, h);
+    grad.addColorStop(0, rgba(color.shadow, 0.9));
+    grad.addColorStop(1, rgba(color.feltEdge, 0.95));
+    roundedPath(ctx, 2, 2, w - 4, h - 4, [10, 10, 10, 10]);
+    ctx.fillStyle = grad;
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = rgba(color.goldDim, 0.7);
+    ctx.stroke();
+    // Bright top lip, the one edge that reads even once stretched wide.
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = rgba(color.gold, 0.8);
+    ctx.beginPath();
+    ctx.moveTo(6, 3);
+    ctx.lineTo(w - 6, 3);
+    ctx.stroke();
+  });
+
   bake(scene, TEX.lever, 60, 220, (ctx) => {
     ctx.fillStyle = rgba(color.goldDim);
     roundedPath(ctx, 24, 40, 12, 170, [6, 6, 6, 6]);
@@ -533,6 +560,47 @@ function bakeUiTextures(scene: Phaser.Scene): void {
     ctx.lineWidth = 2;
     ctx.strokeStyle = rgba(color.shadow, 0.4);
     ctx.stroke();
+
+    // Mounting bracket at the base. This end is the pivot — the scene anchors
+    // the lever's origin here and rotates it about this point on a pull, so
+    // the art has to visually ground that as a bolted joint, not a loose stick.
+    ctx.fillStyle = rgba(color.shadow, 0.85);
+    roundedPath(ctx, 14, 196, 32, 20, [4, 4, 4, 4]);
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = rgba(color.goldDim, 0.9);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(30, 206, 5, 0, Math.PI * 2);
+    ctx.fillStyle = rgba(color.gold, 0.9);
+    ctx.fill();
+  });
+
+  // Cabinet pillar: a slender fixed-size plate (SlotsScene mounts the lever on
+  // one and the reel +/- controls on the other), baked at the exact size it's
+  // displayed at — see SlotsScene's PILLAR_WIDTH/CABINET_HEIGHT.
+  bake(scene, TEX.slotPillar, 44, 400, (ctx, w, h) => {
+    const grad = ctx.createLinearGradient(0, 0, w, 0);
+    grad.addColorStop(0, rgba(color.feltEdge));
+    grad.addColorStop(0.5, rgba(color.panel));
+    grad.addColorStop(1, rgba(color.feltEdge));
+    roundedPath(ctx, 2, 2, w - 4, h - 4, [8, 8, 8, 8]);
+    ctx.fillStyle = grad;
+    ctx.fill();
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = rgba(color.gold, 0.85);
+    ctx.stroke();
+
+    // Bolts down the length, for a mechanical, load-bearing read.
+    for (let y = 34; y < h - 24; y += 64) {
+      ctx.beginPath();
+      ctx.arc(w / 2, y, 5, 0, Math.PI * 2);
+      ctx.fillStyle = rgba(color.shadow, 0.6);
+      ctx.fill();
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = rgba(color.goldDim, 0.8);
+      ctx.stroke();
+    }
   });
 
   // --- Slot "changing image" reactions. Gold = the celebrated LOSS of money. ---

@@ -12,40 +12,77 @@ import { outcome, text } from '../core/theme';
 import { stepReelCount } from '../core/slotLogic';
 import { GAME_WIDTH, fitCamera } from '../core/viewport';
 import {
-  SLOT_SYMBOLS, SLOT_FRAME_INSET, TEX, symbolIconKey, symbolTextureKey,
+  SLOT_SYMBOLS, SLOT_FRAME_INSET, SLOT_BASE_INSET, TEX, symbolIconKey, symbolTextureKey,
   type SlotSymbol,
 } from '../core/assets';
 
-const STAKE_CHIPS = [100, 1000, 5000, 10000]; // cents: $1 / $10 / $50 / $100
+// Stake tiers at the minimum reel count; scales up with `stakeMultiplier()` so
+// a wider machine is a bigger-stakes machine, not just a longer one.
+const STAKE_BASE = [100, 1000, 5000, 10000]; // cents: $1 / $10 / $50 / $100
 const REEL_SIZE = 128;
 const REEL_GAP = 24;
-const MACHINE_X_OFFSET = -80; // nudge left so the machine clears the paytable
-const MACHINE_Y = 300;
-const FRAME_HEIGHT = 320;
-const FRAME_PAD = 90;
-const REEL_LOCAL_Y = 40;     // reels sit in the lower half of the frame
-const REACTION_LOCAL_Y = -128; // "changing image" in the upper half
-const REACTION_SIZE = { w: 200, h: 140 } as const; // authored size of the baked face
+const FRAME_PAD = 70; // horizontal padding around the reels inside the window
+const MACHINE_X_OFFSET = -80; // nudge left, at the minimum reel count, so the machine clears the paytable
+const MACHINE_X_SHIFT_PER_REEL = 18; // extra left nudge per reel past the minimum — a wider cabinet needs more clearance
+const MACHINE_Y = 335;
+
+// Cabinet vertical layout: a header marquee (the "changing image" reaction
+// lives here — never in the reel window, so the two can't visually collide),
+// the reel window, and a base tray. All three share the machine's centre x and
+// stretch to the active reel span; see `layoutCabinet`.
+const WINDOW_HEIGHT = 170;
+const MARQUEE_HEIGHT = 120;
+const BASE_HEIGHT = 60;
+const CABINET_TOP = -(WINDOW_HEIGHT / 2 + MARQUEE_HEIGHT);
+const CABINET_BOTTOM = WINDOW_HEIGHT / 2 + BASE_HEIGHT;
+const CABINET_HEIGHT = CABINET_BOTTOM - CABINET_TOP;
+const PILLAR_LOCAL_Y = (CABINET_TOP + CABINET_BOTTOM) / 2;
+const BASE_LOCAL_Y = WINDOW_HEIGHT / 2 + BASE_HEIGHT / 2;
+const REEL_LOCAL_Y = 0; // reels sit centred in the window
+const REACTION_LOCAL_Y = -(WINDOW_HEIGHT / 2 + MARQUEE_HEIGHT / 2); // marquee centre
+const REACTION_SIZE = { w: 170, h: 88 } as const; // authored size of the baked face
+
+// Side pillars: fixed-size (never stretched), reposition with the frame width.
+const PILLAR_WIDTH = 44;
+const PILLAR_GAP = 6; // felt reveal between the window and its pillar
+
+// Marquee light row, as fractions of the current frame width.
+const BULB_FRACTIONS = [-0.42, -0.25, -0.08, 0.08, 0.25, 0.42] as const;
+
+// The lever image is baked at 60x220 (see assets.ts); scale it, keeping
+// aspect, to whatever height looks right mounted on the pillar.
+const LEVER_SOURCE_ASPECT = 60 / 220;
+const LEVER_HEIGHT = 240;
 
 export class SlotsScene extends Phaser.Scene {
-  private stakeCents = 100;
+  private stakeIndex = 0;
   private reelCount = 3;
   private minReels = 3;
   private maxReels = 5;
   private spinning = false;
 
   private machine!: Phaser.GameObjects.Container;
+  private base!: Phaser.GameObjects.NineSlice;
   private frame!: Phaser.GameObjects.NineSlice;
+  private marquee!: Phaser.GameObjects.NineSlice;
+  private pillarL!: Phaser.GameObjects.Image;
+  private pillarR!: Phaser.GameObjects.Image;
+  private bulbs: Phaser.GameObjects.Image[] = [];
   private reaction!: Phaser.GameObjects.Image;
   private reelSprites: Phaser.GameObjects.Image[] = [];
   private reelIcons: Phaser.GameObjects.Image[] = [];
-  private chipButtons: { cents: number; btn: Button }[] = [];
-  private lever!: Button;
+  private chipButtons: { index: number; btn: Button }[] = [];
+  private lever!: Phaser.GameObjects.Image;
+  private leverLabel!: Phaser.GameObjects.Text;
+  private leverEnabled = true;
   private plusBtn!: Button;
   private minusBtn!: Button;
+  private reelLabel!: Phaser.GameObjects.Text;
+  private reelCountBg!: Phaser.GameObjects.Image;
   private reelCountText!: Phaser.GameObjects.Text;
   private toast!: Phaser.GameObjects.Text;
   private infoPanel!: SlotInfoPanel;
+  private idleTween?: Phaser.Tweens.Tween;
 
   constructor() {
     super('Slots');
@@ -56,9 +93,9 @@ export class SlotsScene extends Phaser.Scene {
     this.spinning = false;
     this.reelSprites = [];
     this.reelIcons = [];
+    this.bulbs = [];
 
     const cx = GAME_WIDTH / 2;
-    const machineX = cx + MACHINE_X_OFFSET;
     fitCamera(this);
     paintBackdrop(this);
     mountTopHud(this);
@@ -66,43 +103,44 @@ export class SlotsScene extends Phaser.Scene {
     // Clear of the HUD panels, which now own the top 92px of the frame.
     this.add.text(cx, 104, 'SLOTS', text.heading).setOrigin(0.5);
 
-    // The machine as one container so juice can squash-and-stretch the whole unit.
-    this.machine = this.add.container(machineX, MACHINE_Y);
+    // The machine as one container so juice can squash-and-stretch the whole
+    // unit, and so every mounted control (lever, reel controls) rides along.
+    this.machine = this.add.container(this.computeMachineX(), MACHINE_Y);
+
+    this.base = this.add.nineslice(
+      0, BASE_LOCAL_Y, TEX.slotBase, undefined, 400, BASE_HEIGHT,
+      SLOT_BASE_INSET, SLOT_BASE_INSET, SLOT_BASE_INSET, SLOT_BASE_INSET,
+    );
     this.frame = this.add.nineslice(
-      0, -30, TEX.slotFrame, undefined, 400, FRAME_HEIGHT,
+      0, 0, TEX.slotFrame, undefined, 400, WINDOW_HEIGHT,
       SLOT_FRAME_INSET, SLOT_FRAME_INSET, SLOT_FRAME_INSET, SLOT_FRAME_INSET,
     );
+    this.marquee = this.add.nineslice(
+      0, REACTION_LOCAL_Y, TEX.slotFrame, undefined, 400, MARQUEE_HEIGHT,
+      SLOT_FRAME_INSET, SLOT_FRAME_INSET, SLOT_FRAME_INSET, SLOT_FRAME_INSET,
+    );
+    this.pillarL = this.add.image(0, PILLAR_LOCAL_Y, TEX.slotPillar).setDisplaySize(PILLAR_WIDTH, CABINET_HEIGHT);
+    this.pillarR = this.add.image(0, PILLAR_LOCAL_Y, TEX.slotPillar).setDisplaySize(PILLAR_WIDTH, CABINET_HEIGHT);
+    this.bulbs = BULB_FRACTIONS.map((_, i) => this.add.image(0, 0, i % 2 === 0 ? TEX.coin : TEX.glitch).setDisplaySize(12, 12));
     // Baked textures come out oversized (see `bake`), so the few images that
     // don't otherwise set a size have to state it.
     this.reaction = this.add.image(0, REACTION_LOCAL_Y, TEX.reactionNeutral)
       .setDisplaySize(REACTION_SIZE.w, REACTION_SIZE.h);
-    this.machine.add([this.frame, this.reaction]);
+    this.machine.add([this.base, this.pillarL, this.pillarR, this.frame, this.marquee, ...this.bulbs, this.reaction]);
 
-    this.buildReels();
-
-    // Pull-lever (the only spin trigger) to the left of the machine.
-    this.lever = new Button(this, 150, MACHINE_Y, 'PULL', () => this.pullLever(),
-      { width: 96, height: 120 });
-
-    // +/- reel controls to the right of the reels.
-    this.add.text(1000, MACHINE_Y - 96, 'REELS', text.label).setOrigin(0.5);
-    this.plusBtn = new Button(this, 1000, MACHINE_Y - 48, '+', () => this.changeReels(+1),
-      { width: 64, height: 56 });
-    this.reelCountText = this.add.text(1000, MACHINE_Y + 8, String(this.reelCount), {
-      ...text.money, fontSize: '22px',
-    }).setOrigin(0.5);
-    this.minusBtn = new Button(this, 1000, MACHINE_Y + 64, '-', () => this.changeReels(-1),
-      { width: 64, height: 56 });
+    this.buildLever();
+    this.buildReelControls();
+    this.buildReels(); // sizes the window/marquee/base/pillars/lever/controls to the initial reel count
 
     // Stake chips.
-    this.add.text(cx, 490, 'STAKE', text.label).setOrigin(0.5);
-    STAKE_CHIPS.forEach((cents, i) => {
+    this.add.text(cx, 558, 'STAKE', text.label).setOrigin(0.5);
+    STAKE_BASE.forEach((_, i) => {
       const x = cx - 255 + i * 170;
-      const btn = new Button(this, x, 540, `$${cents / 100}`, () => this.pickStake(cents), { width: 150 });
-      this.chipButtons.push({ cents, btn });
+      const btn = new Button(this, x, 608, `$${this.stakeCentsFor(i) / 100}`, () => this.pickStake(i), { width: 150 });
+      this.chipButtons.push({ index: i, btn });
     });
 
-    this.toast = this.add.text(cx, 620, '', text.toast).setOrigin(0.5);
+    this.toast = this.add.text(cx, 650, '', text.toast).setOrigin(0.5);
 
     new BackTab(this, 'go back?', () => this.scene.start('Casino'));
 
@@ -112,13 +150,94 @@ export class SlotsScene extends Phaser.Scene {
         this.minReels = info.min_reels;
         this.maxReels = info.max_reels;
         this.infoPanel.setInfo(info);
+        this.buildReels(); // reel count's relation to minReels may have shifted the cabinet nudge/stakes
         this.updateReelControls();
+        this.refreshStakeChips();
       })
       .catch(() => { /* paytable is informational-only; ignore fetch failures */ });
 
-    this.pickStake(this.stakeCents);
+    this.pickStake(0);
     this.updateReelControls();
     this.infoPanel.setReelCount(this.reelCount);
+
+    // Idle sway — a little life in the cabinet between spins. Paused and
+    // zeroed for the duration of a spin so it never fights the outcome juice.
+    this.idleTween = this.tweens.add({
+      targets: this.machine, angle: 1.6, duration: 2600, yoyo: true, repeat: -1, ease: 'Sine.InOut',
+    });
+  }
+
+  private computeMachineX(): number {
+    const extraReels = Math.max(0, this.reelCount - this.minReels);
+    return GAME_WIDTH / 2 + MACHINE_X_OFFSET - extraReels * MACHINE_X_SHIFT_PER_REEL;
+  }
+
+  private buildLever(): void {
+    const height = LEVER_HEIGHT;
+    const width = height * LEVER_SOURCE_ASPECT;
+    // Origin at the base — the pivot the pull animation rotates around, and
+    // the point the mounting bracket in the art is drawn to meet.
+    this.lever = this.add.image(0, CABINET_BOTTOM, TEX.lever).setOrigin(0.5, 1).setDisplaySize(width, height);
+    this.leverLabel = this.add.text(0, CABINET_BOTTOM + 16, 'PULL', text.label).setOrigin(0.5, 0);
+    this.machine.add([this.lever, this.leverLabel]);
+
+    this.lever.setInteractive({ useHandCursor: true });
+    this.lever.on('pointerdown', () => {
+      if (this.spinning || !this.leverEnabled) return;
+      audio.playClick();
+      this.pullLever();
+    });
+  }
+
+  private setLeverEnabled(enabled: boolean): void {
+    this.leverEnabled = enabled;
+    this.lever.setAlpha(enabled ? 1 : 0.4);
+    if (this.lever.input) this.lever.input.enabled = enabled;
+  }
+
+  private buildReelControls(): void {
+    this.reelLabel = this.add.text(0, PILLAR_LOCAL_Y - 90, 'REELS', text.label).setOrigin(0.5);
+    this.plusBtn = new Button(this, 0, PILLAR_LOCAL_Y - 40, '+', () => this.changeReels(+1), {
+      width: 56, height: 50, fontSize: '30px',
+    });
+    // The count reads as its own control (not just loose text on the pillar)
+    // by sharing the exact button chrome the +/- controls either side use.
+    this.reelCountBg = this.add.image(0, PILLAR_LOCAL_Y + 15, TEX.button).setDisplaySize(56, 50);
+    this.reelCountText = this.add.text(0, PILLAR_LOCAL_Y + 15, String(this.reelCount), {
+      ...text.money, fontSize: '22px',
+    }).setOrigin(0.5);
+    this.minusBtn = new Button(this, 0, PILLAR_LOCAL_Y + 70, '−', () => this.changeReels(-1), {
+      width: 56, height: 50, fontSize: '30px',
+    });
+    this.machine.add([this.reelLabel, this.plusBtn, this.reelCountBg, this.reelCountText, this.minusBtn]);
+  }
+
+  /** Resizes the stretchable plates and repositions every pillar-mounted
+   *  control to match the active reel span — the fix for controls that used
+   *  to sit at a fixed screen x regardless of the cabinet's actual width. */
+  private layoutCabinet(frameWidth: number): void {
+    this.frame.setSize(frameWidth, WINDOW_HEIGHT);
+    this.marquee.setSize(frameWidth, MARQUEE_HEIGHT);
+    this.base.setSize(frameWidth, BASE_HEIGHT);
+
+    const pillarX = frameWidth / 2 + PILLAR_GAP + PILLAR_WIDTH / 2;
+    this.pillarL.x = -pillarX;
+    this.pillarR.x = pillarX;
+    this.lever.x = pillarX;
+    this.leverLabel.x = pillarX;
+    this.reelLabel.x = -pillarX;
+    this.plusBtn.x = -pillarX;
+    this.reelCountBg.x = -pillarX;
+    this.reelCountText.x = -pillarX;
+    this.minusBtn.x = -pillarX;
+
+    const bulbY = REACTION_LOCAL_Y - MARQUEE_HEIGHT / 2 + 10;
+    this.bulbs.forEach((bulb, i) => {
+      bulb.x = BULB_FRACTIONS[i] * frameWidth;
+      bulb.y = bulbY;
+    });
+
+    this.machine.x = this.computeMachineX();
   }
 
   private buildReels(): void {
@@ -141,8 +260,7 @@ export class SlotsScene extends Phaser.Scene {
       this.reelIcons.push(icon);
     }
 
-    // Resize the nine-slice frame to hug the active reels (Option A).
-    this.frame.setSize(span + FRAME_PAD, FRAME_HEIGHT);
+    this.layoutCabinet(span + FRAME_PAD);
   }
 
   private setReel(i: number, sym: SlotSymbol): void {
@@ -154,12 +272,32 @@ export class SlotsScene extends Phaser.Scene {
     this.reaction.setTexture(key);
   }
 
-  private pickStake(cents: number): void {
-    this.stakeCents = cents;
+  /** More reels is purely a stake-per-spin choice (the backend's payout logic
+   *  is reel-count agnostic) — so a wider machine plays for higher stakes. */
+  private stakeMultiplier(): number {
+    return 1 + Math.max(0, this.reelCount - this.minReels);
+  }
+
+  private stakeCentsFor(index: number): number {
+    return STAKE_BASE[index] * this.stakeMultiplier();
+  }
+
+  private get stakeCents(): number {
+    return this.stakeCentsFor(this.stakeIndex);
+  }
+
+  private pickStake(index: number): void {
+    this.stakeIndex = index;
+    this.refreshStakeChips();
+  }
+
+  private refreshStakeChips(): void {
     const balance = session.user?.balance_cents ?? 0;
-    this.chipButtons.forEach(({ cents: c, btn }) => {
-      btn.setSelected(c === cents);
-      btn.setEnabled(c <= balance);
+    this.chipButtons.forEach(({ index, btn }) => {
+      const cents = this.stakeCentsFor(index);
+      btn.setText(`$${cents / 100}`);
+      btn.setSelected(index === this.stakeIndex);
+      btn.setEnabled(cents <= balance);
     });
   }
 
@@ -170,6 +308,7 @@ export class SlotsScene extends Phaser.Scene {
     this.reelCount = next;
     this.buildReels();
     this.updateReelControls();
+    this.refreshStakeChips();
     this.infoPanel?.setReelCount(next);
   }
 
@@ -181,16 +320,16 @@ export class SlotsScene extends Phaser.Scene {
 
   private setControls(enabled: boolean): void {
     if (!this.scene.isActive()) return; // scene may have handed off to Win
-    this.lever.setEnabled(enabled);
+    this.setLeverEnabled(enabled);
     this.chipButtons.forEach(({ btn }) => btn.setEnabled(enabled));
     this.updateReelControls();
-    if (enabled) this.pickStake(this.stakeCents); // re-disable unaffordable chips
+    if (enabled) this.refreshStakeChips(); // re-disable unaffordable chips
   }
 
   private pullLever(): void {
     if (this.spinning) return;
     this.tweens.add({
-      targets: this.lever, angle: 12, duration: 90, yoyo: true, ease: 'Sine.InOut',
+      targets: this.lever, angle: 30, duration: 90, yoyo: true, ease: 'Sine.InOut',
     });
     void this.spin();
   }
@@ -204,6 +343,11 @@ export class SlotsScene extends Phaser.Scene {
     this.toast.setText('');
     this.showReaction(TEX.reactionNeutral);
     this.setControls(false);
+    // Idle sway would otherwise fight the shake/squash juice below on the
+    // same `angle` property, so it's paused and the cabinet zeroed for the
+    // duration of the spin.
+    this.idleTween?.pause();
+    this.machine.setAngle(0);
     audio.playSpin();
 
     // Reel roll animation: cycle random symbols briefly.
@@ -250,6 +394,7 @@ export class SlotsScene extends Phaser.Scene {
     } finally {
       this.spinning = false;
       this.setControls(true);
+      this.idleTween?.resume();
     }
   }
 

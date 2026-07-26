@@ -16,6 +16,13 @@ interface ButtonOpts {
    * scaling from the centre would swell the rounded corner off the frame.
    */
   lift?: boolean;
+  /**
+   * Override the label's font size. `text.button`'s letter-spacing is tuned
+   * for word labels ("PULL", "SPIN") — a lone glyph like '+' or '−' reads
+   * thin and off-centre under it, so single-character buttons want a bigger
+   * size and no letter-spacing.
+   */
+  fontSize?: string;
 }
 
 /** Hover lift, shared by every widget in the kit. */
@@ -48,7 +55,10 @@ export class Button extends Phaser.GameObjects.Container {
     this.lift = opts.lift ?? true;
 
     this.bg = scene.add.image(0, 0, this.restTexture).setDisplaySize(this.boxW, this.boxH);
-    this.label = scene.add.text(0, 0, label, text.button).setOrigin(0.5);
+    const labelStyle = opts.fontSize
+      ? { ...text.button, fontSize: opts.fontSize, letterSpacing: 0 }
+      : text.button;
+    this.label = scene.add.text(0, 0, label, labelStyle).setOrigin(0.5);
     this.add([this.bg, this.label]);
 
     // Container input normalizes the hit point by displayOrigin (half-size)
