@@ -1,8 +1,9 @@
 import Phaser from 'phaser';
 import { audio } from '../core/audio';
 import { paintBackdrop } from '../ui/Backdrop';
-import { css, font, text } from '../core/theme';
+import { css, text } from '../core/theme';
 import { PressGuard } from '../core/pressGuard';
+import { GAME_WIDTH, fitCamera } from '../core/viewport';
 
 export class TitleScene extends Phaser.Scene {
   constructor() {
@@ -10,16 +11,17 @@ export class TitleScene extends Phaser.Scene {
   }
 
   create(): void {
-    const cx = this.scale.width / 2;
+    const cx = GAME_WIDTH / 2;
+    fitCamera(this);
     paintBackdrop(this);
 
     this.add.text(cx, 200, 'LOSE-LOSE SITUATION', {
-      fontFamily: font.display, fontSize: '64px', fontStyle: '700',
+      ...text.title, fontSize: '50px', fontStyle: '700',
       color: css.gold, letterSpacing: 3,
     }).setOrigin(0.5);
 
     this.add.text(cx, 300, 'your curse is your fortune — lose it all.', {
-      ...text.title, fontSize: '26px',
+      ...text.title, fontSize: '21px',
     }).setOrigin(0.5);
 
     this.add.text(cx, 440, 'reach $0 to WIN.', {

@@ -12,6 +12,8 @@
 // that meaning, but the table is now green, so gold does instead — see `reward`
 // and `punish` below and always reference those rather than a raw colour.
 
+import { RENDER_SCALE } from './viewport';
+
 /** Every colour, as a Phaser-friendly number. */
 export const color = {
   felt: 0x256b4f, // backdrop centre
@@ -73,62 +75,80 @@ type TextStyle = Phaser.Types.GameObjects.Text.TextStyle;
  * Named text styles. Scenes should reach for one of these rather than spelling
  * out a size and colour, so a type change lands everywhere at once.
  *
+ * Sizes are in AUTHORED units (see `core/viewport.ts`), not device pixels.
+ * `resolution` is what actually makes the glyphs crisp: it rasterises the text
+ * texture at RENDER_SCALE so the zoomed camera samples it 1:1 instead of
+ * magnifying a 720p glyph. It belongs on every style — a style that omits it is
+ * a soft-text bug, and the one-off sizes in scenes inherit it by spreading a
+ * token (`{ ...text.money, fontSize: '22px' }`).
+ *
  * `letterSpacing` needs Phaser >= 3.60; we're on 3.90.
  */
 export const text = {
   /** Big italic serif scene titles ("choose your poison"). */
   title: {
-    fontFamily: font.display, fontSize: '46px', fontStyle: 'italic 700', color: css.cream,
+    fontFamily: font.display, fontSize: '36px', fontStyle: 'italic 700', color: css.cream,
+    resolution: RENDER_SCALE,
   },
   /** Gold section headings. */
   heading: {
-    fontFamily: font.display, fontSize: '32px', fontStyle: '700', color: css.gold,
+    fontFamily: font.display, fontSize: '26px', fontStyle: '700', color: css.gold,
+    resolution: RENDER_SCALE,
   },
   /** The wallet figure and other engraved numbers. */
   money: {
-    fontFamily: font.display, fontSize: '38px', fontStyle: '700', color: css.cream,
+    fontFamily: font.display, fontSize: '28px', fontStyle: '700', color: css.cream,
+    resolution: RENDER_SCALE,
   },
   /** Small wide caps over a panel or control ("BALANCE", "STAKE"). */
   label: {
-    fontFamily: font.ui, fontSize: '15px', fontStyle: '600',
-    color: css.creamDim, letterSpacing: 5,
+    fontFamily: font.ui, fontSize: '13px', fontStyle: '600',
+    color: css.creamDim, letterSpacing: 5, resolution: RENDER_SCALE,
   },
   /** An orb's name, revealed on hover. */
   orbName: {
-    fontFamily: font.ui, fontSize: '21px', fontStyle: '600',
-    color: css.cream, letterSpacing: 6,
+    fontFamily: font.ui, fontSize: '18px', fontStyle: '600',
+    color: css.cream, letterSpacing: 6, resolution: RENDER_SCALE,
   },
   /** An orb's one-line description, revealed on hover under its name. */
   orbDesc: {
-    fontFamily: font.ui, fontSize: '15px', color: css.creamDim,
+    fontFamily: font.ui, fontSize: '14px', color: css.creamDim,
+    resolution: RENDER_SCALE,
   },
   /** A machine card's name, set below the card. */
   cardName: {
-    fontFamily: font.ui, fontSize: '20px', fontStyle: '600',
-    color: css.cream, letterSpacing: 5,
+    fontFamily: font.ui, fontSize: '17px', fontStyle: '600',
+    color: css.cream, letterSpacing: 5, resolution: RENDER_SCALE,
   },
   /** Button labels. */
   button: {
-    fontFamily: font.ui, fontSize: '21px', fontStyle: '600',
-    color: css.cream, letterSpacing: 3,
+    fontFamily: font.ui, fontSize: '18px', fontStyle: '600',
+    color: css.cream, letterSpacing: 3, resolution: RENDER_SCALE,
   },
   /** Body copy — prompts, taglines, paytable rows. */
   body: {
-    fontFamily: font.ui, fontSize: '18px', color: css.creamDim,
+    fontFamily: font.ui, fontSize: '16px', color: css.creamDim,
+    resolution: RENDER_SCALE,
   },
   /** Transient error/coming-soon messages. */
   toast: {
-    fontFamily: font.ui, fontSize: '18px', color: css.redBright,
+    fontFamily: font.ui, fontSize: '16px', color: css.redBright,
+    resolution: RENDER_SCALE,
   },
 } as const satisfies Record<string, TextStyle>;
 
 /** Screen-edge chrome geometry, shared by the HUD panels and the back tab. */
 export const chrome = {
+  /** Height of the wallet half — the tall part of the HUD's L. */
   hudHeight: 92,
   walletWidth: 264,
   progressWidth: 300,
-  /** Gap between the wallet and progress panels. */
-  hudGap: 8,
+  /**
+   * Height of the progress half. Deliberately shorter than {@link hudHeight}:
+   * the two are welded into one L-shaped piece that steps down at
+   * {@link walletWidth}, so this is the height of that step, not a panel.
+   */
+  progressHeight: 48,
   backWidth: 208,
   backHeight: 64,
   /** Corner radius on the rounded (inward-facing) corners of edge chrome. */

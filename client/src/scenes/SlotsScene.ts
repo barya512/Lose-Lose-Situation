@@ -10,6 +10,7 @@ import { audio } from '../core/audio';
 import { juice } from '../core/juice';
 import { outcome, text } from '../core/theme';
 import { stepReelCount } from '../core/slotLogic';
+import { GAME_WIDTH, fitCamera } from '../core/viewport';
 import {
   SLOT_SYMBOLS, SLOT_FRAME_INSET, TEX, symbolIconKey, symbolTextureKey,
   type SlotSymbol,
@@ -24,6 +25,7 @@ const FRAME_HEIGHT = 320;
 const FRAME_PAD = 90;
 const REEL_LOCAL_Y = 40;     // reels sit in the lower half of the frame
 const REACTION_LOCAL_Y = -128; // "changing image" in the upper half
+const REACTION_SIZE = { w: 200, h: 140 } as const; // authored size of the baked face
 
 export class SlotsScene extends Phaser.Scene {
   private stakeCents = 100;
@@ -55,8 +57,9 @@ export class SlotsScene extends Phaser.Scene {
     this.reelSprites = [];
     this.reelIcons = [];
 
-    const cx = this.scale.width / 2;
+    const cx = GAME_WIDTH / 2;
     const machineX = cx + MACHINE_X_OFFSET;
+    fitCamera(this);
     paintBackdrop(this);
     mountTopHud(this);
 
@@ -69,7 +72,10 @@ export class SlotsScene extends Phaser.Scene {
       0, -30, TEX.slotFrame, undefined, 400, FRAME_HEIGHT,
       SLOT_FRAME_INSET, SLOT_FRAME_INSET, SLOT_FRAME_INSET, SLOT_FRAME_INSET,
     );
-    this.reaction = this.add.image(0, REACTION_LOCAL_Y, TEX.reactionNeutral);
+    // Baked textures come out oversized (see `bake`), so the few images that
+    // don't otherwise set a size have to state it.
+    this.reaction = this.add.image(0, REACTION_LOCAL_Y, TEX.reactionNeutral)
+      .setDisplaySize(REACTION_SIZE.w, REACTION_SIZE.h);
     this.machine.add([this.frame, this.reaction]);
 
     this.buildReels();
@@ -83,7 +89,7 @@ export class SlotsScene extends Phaser.Scene {
     this.plusBtn = new Button(this, 1000, MACHINE_Y - 48, '+', () => this.changeReels(+1),
       { width: 64, height: 56 });
     this.reelCountText = this.add.text(1000, MACHINE_Y + 8, String(this.reelCount), {
-      ...text.money, fontSize: '30px',
+      ...text.money, fontSize: '22px',
     }).setOrigin(0.5);
     this.minusBtn = new Button(this, 1000, MACHINE_Y + 64, '-', () => this.changeReels(-1),
       { width: 64, height: 56 });
@@ -100,7 +106,7 @@ export class SlotsScene extends Phaser.Scene {
 
     new BackTab(this, 'go back?', () => this.scene.start('Casino'));
 
-    this.infoPanel = new SlotInfoPanel(this, this.scale.width - 140, 380, 560);
+    this.infoPanel = new SlotInfoPanel(this, GAME_WIDTH - 140, 380, 560);
     api.slotsInfo()
       .then((info) => {
         this.minReels = info.min_reels;
@@ -127,7 +133,8 @@ export class SlotsScene extends Phaser.Scene {
     for (let i = 0; i < this.reelCount; i++) {
       const x = startX + i * (REEL_SIZE + REEL_GAP);
       const sym = SLOT_SYMBOLS[i % SLOT_SYMBOLS.length];
-      const img = this.add.image(x, REEL_LOCAL_Y, symbolTextureKey(sym));
+      const img = this.add.image(x, REEL_LOCAL_Y, symbolTextureKey(sym))
+        .setDisplaySize(REEL_SIZE, REEL_SIZE);
       const icon = this.add.image(x, REEL_LOCAL_Y, symbolIconKey(sym));
       this.machine.add([img, icon]);
       this.reelSprites.push(img);

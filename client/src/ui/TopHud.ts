@@ -6,8 +6,8 @@ import { chrome, color, text } from '../core/theme';
 import type { User } from '../core/types';
 
 /**
- * The wallet, welded into the top-LEFT corner of the frame: it touches both the
- * top and left edges, and only its inward-facing corner is rounded.
+ * The wallet readout, in the top-LEFT corner of the frame. Only the live text —
+ * the chrome behind it belongs to the shared L drawn by {@link mountTopHud}.
  */
 export class WalletPanel extends Phaser.GameObjects.Container {
   private balanceText: Phaser.GameObjects.Text;
@@ -16,13 +16,10 @@ export class WalletPanel extends Phaser.GameObjects.Container {
 
   constructor(scene: Phaser.Scene) {
     super(scene, 0, 0);
-    const w = chrome.walletWidth;
-    const h = chrome.hudHeight;
 
-    const bg = scene.add.image(0, 0, TEX.walletPanel).setOrigin(0, 0).setDisplaySize(w, h);
     const label = scene.add.text(20, 18, 'BALANCE', text.label);
     this.balanceText = scene.add.text(20, 40, dollars(0), text.money);
-    this.add([bg, label, this.balanceText]);
+    this.add([label, this.balanceText]);
     scene.add.existing(this);
 
     this.unsubscribe = session.onChange((u) => this.render(u));
@@ -45,8 +42,9 @@ export class WalletPanel extends Phaser.GameObjects.Container {
 }
 
 /**
- * How far the run has travelled toward $0 — the win condition. Sits immediately
- * right of the wallet, touching the top edge, rounded along its bottom.
+ * How far the run has travelled toward $0 — the win condition. A bare bar, with
+ * no caption: it lives in the short step of the HUD's L, immediately right of
+ * the wallet it is read against.
  */
 export class ProgressPanel extends Phaser.GameObjects.Container {
   private barFill: Phaser.GameObjects.Rectangle;
@@ -55,18 +53,15 @@ export class ProgressPanel extends Phaser.GameObjects.Container {
 
   constructor(scene: Phaser.Scene, x: number) {
     super(scene, x, 0);
-    const w = chrome.progressWidth;
-    const h = chrome.hudHeight;
-    this.barWidth = w - 40;
+    this.barWidth = chrome.progressWidth - 40;
+    const midY = chrome.progressHeight / 2;
 
-    const bg = scene.add.image(0, 0, TEX.progressPanel).setOrigin(0, 0).setDisplaySize(w, h);
-    const label = scene.add.text(20, 18, 'PROGRESS', text.label);
     const trough = scene.add
-      .rectangle(20, 58, this.barWidth, 14, color.feltEdge)
+      .rectangle(20, midY, this.barWidth, 14, color.feltEdge)
       .setOrigin(0, 0.5)
       .setStrokeStyle(1, color.goldDim, 0.7);
-    this.barFill = scene.add.rectangle(20, 58, 0, 14, color.gold).setOrigin(0, 0.5);
-    this.add([bg, label, trough, this.barFill]);
+    this.barFill = scene.add.rectangle(20, midY, 0, 14, color.gold).setOrigin(0, 0.5);
+    this.add([trough, this.barFill]);
     scene.add.existing(this);
 
     this.unsubscribe = session.onChange(() => this.render());
@@ -80,11 +75,16 @@ export class ProgressPanel extends Phaser.GameObjects.Container {
 }
 
 /**
- * Build the whole top HUD for a scene. Both panels are pure readouts — nothing
- * up here is clickable, and both unsubscribe themselves on scene shutdown, so a
+ * Build the whole top HUD for a scene: one L-shaped plate of chrome, then the
+ * two live readouts on top of it. Both readouts are pure output — nothing up
+ * here is clickable, and both unsubscribe themselves on scene shutdown, so a
  * caller never needs a handle on them.
  */
 export function mountTopHud(scene: Phaser.Scene): void {
+  scene.add
+    .image(0, 0, TEX.hudChrome)
+    .setOrigin(0, 0)
+    .setDisplaySize(chrome.walletWidth + chrome.progressWidth, chrome.hudHeight);
   new WalletPanel(scene);
-  new ProgressPanel(scene, chrome.walletWidth + chrome.hudGap);
+  new ProgressPanel(scene, chrome.walletWidth);
 }

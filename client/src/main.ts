@@ -10,10 +10,10 @@ import { MarketScene } from './scenes/MarketScene';
 import { WinScene } from './scenes/WinScene';
 import { session } from './core/session';
 import { css } from './core/theme';
+import { GAME_WIDTH, GAME_HEIGHT, RENDER_SCALE } from './core/viewport';
 
-export const GAME_WIDTH = 1280;
-export const GAME_HEIGHT = 720;
-
+// The canvas is RENDER_SCALE times the authored size; every scene's camera zooms
+// back by the same factor (`fitCamera`). See docs/adr/0006-2x-render-scale.md.
 const game = new Phaser.Game({
   type: Phaser.AUTO,
   parent: 'game',
@@ -23,8 +23,8 @@ const game = new Phaser.Game({
   scale: {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,
-    width: GAME_WIDTH,
-    height: GAME_HEIGHT,
+    width: GAME_WIDTH * RENDER_SCALE,
+    height: GAME_HEIGHT * RENDER_SCALE,
   },
   // Only process input events that target the canvas. Without this, Phaser's
   // window-level mouse listeners hit-test DOM-overlay clicks (e.g. the auth

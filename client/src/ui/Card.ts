@@ -31,13 +31,13 @@ export class Card extends Phaser.GameObjects.Container {
     super(scene, x, y);
     this.homeX = x;
     this.homeY = y;
-    this.boxW = opts.width ?? 240;
-    this.boxH = opts.height ?? 336;
+    this.boxW = opts.width ?? 180;
+    this.boxH = opts.height ?? 252;
 
     this.bg = scene.add.image(0, 0, TEX.card).setDisplaySize(this.boxW, this.boxH);
     this.art = scene.add.image(0, 0, artKey).setDisplaySize(this.boxW, this.boxH);
     const name = scene.add
-      .text(0, this.boxH / 2 + 26, label, text.cardName)
+      .text(0, this.boxH / 2 + 20, label, text.cardName)
       .setOrigin(0.5, 0);
     this.add([this.bg, this.art, name]);
 

@@ -1,9 +1,10 @@
 import Phaser from 'phaser';
 import { Button } from '../ui/Button';
 import { paintBackdrop } from '../ui/Backdrop';
-import { css, font, text } from '../core/theme';
+import { css, text } from '../core/theme';
 import { session } from '../core/session';
 import { audio } from '../core/audio';
+import { GAME_WIDTH, fitCamera } from '../core/viewport';
 
 export class WinScene extends Phaser.Scene {
   constructor() {
@@ -11,16 +12,17 @@ export class WinScene extends Phaser.Scene {
   }
 
   create(): void {
-    const cx = this.scale.width / 2;
+    const cx = GAME_WIDTH / 2;
+    fitCamera(this);
     paintBackdrop(this);
     audio.playWinTheme(this);
 
     this.add.text(cx, 220, 'YOU LOST EVERYTHING.', {
-      ...text.heading, fontSize: '46px', color: css.cream,
+      ...text.heading, fontSize: '36px', color: css.cream,
     }).setOrigin(0.5);
 
     this.add.text(cx, 310, 'YOU WIN.', {
-      fontFamily: font.display, fontSize: '78px', fontStyle: '700',
+      ...text.heading, fontSize: '60px', fontStyle: '700',
       color: css.gold, letterSpacing: 4,
     }).setOrigin(0.5);
 

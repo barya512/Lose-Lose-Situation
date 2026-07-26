@@ -6,6 +6,7 @@ import { showAuthForm } from '../ui/authForm';
 import { api, ApiError } from '../core/api';
 import { session } from '../core/session';
 import type { TokenResult } from '../core/types';
+import { GAME_WIDTH, fitCamera } from '../core/viewport';
 
 export class MenuScene extends Phaser.Scene {
   private status?: Phaser.GameObjects.Text;
@@ -15,7 +16,8 @@ export class MenuScene extends Phaser.Scene {
   }
 
   create(): void {
-    const cx = this.scale.width / 2;
+    const cx = GAME_WIDTH / 2;
+    fitCamera(this);
     paintBackdrop(this);
 
     this.add.text(cx, 140, 'CHOOSE YOUR RUIN', text.heading).setOrigin(0.5);

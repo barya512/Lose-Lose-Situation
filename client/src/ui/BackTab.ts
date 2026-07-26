@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { Button } from './Button';
 import { TEX } from '../core/assets';
 import { chrome } from '../core/theme';
+import { GAME_HEIGHT } from '../core/viewport';
 
 /**
  * Backward navigation, welded into the bottom-LEFT corner of the frame — the
@@ -16,7 +17,7 @@ export class BackTab extends Button {
     super(
       scene,
       chrome.backWidth / 2,
-      scene.scale.height - chrome.backHeight / 2,
+      GAME_HEIGHT - chrome.backHeight / 2,
       `←  ${label}`,
       onClick,
       {

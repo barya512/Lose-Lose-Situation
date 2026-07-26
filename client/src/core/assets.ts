@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { chrome, color, font } from './theme';
+import { GAME_WIDTH, GAME_HEIGHT, RENDER_SCALE } from './viewport';
 import cherryIcon from '../../../assets/CHERRY.png';
 import lemonIcon from '../../../assets/LEMON.png';
 import bellIcon from '../../../assets/BELL.png';
@@ -29,9 +30,9 @@ export const TEX = {
   panel: 'ui.panel',
   coin: 'particle.coin',
   glitch: 'particle.glitch',
-  // Screen-edge chrome: welded to the top and bottom edges of the frame.
-  walletPanel: 'ui.hud.wallet',
-  progressPanel: 'ui.hud.progress',
+  // Screen-edge chrome: welded to the top and bottom edges of the frame. The
+  // wallet and progress readouts share ONE texture so their join has no seam.
+  hudChrome: 'ui.hud.chrome',
   backTab: 'ui.backtab',
   backTabHover: 'ui.backtab.hover',
   // Orb (bet-select) + its bet icons.
@@ -63,8 +64,12 @@ export const MUSIC = {
   win: 'music.win',
 } as const;
 
-/** Corner inset for the {@link TEX.slotFrame} nine-slice (px). */
-export const SLOT_FRAME_INSET = 24;
+/**
+ * Corner inset for the {@link TEX.slotFrame} nine-slice. Unlike almost every
+ * other number in this file it is measured in SOURCE-TEXTURE pixels, so it
+ * carries the `bake` oversizing that authored units hide.
+ */
+export const SLOT_FRAME_INSET = 24 * RENDER_SCALE;
 
 /** Source size of the baked card face; Card scales this down to taste. */
 const CARD_SOURCE = { width: 300, height: 420 } as const;
@@ -110,15 +115,23 @@ function rgba(c: number, alpha = 1): string {
  * the art is still procedural and still keyed (real art drops in by key later),
  * it's just drawn with the canvas API instead. See
  * docs/adr/0005-canvas-baked-token-driven-theme.md.
+ *
+ * `w`/`h` are AUTHORED units. The canvas is allocated at `RENDER_SCALE` times
+ * that and pre-scaled, so every drawing below stays in authored units and comes
+ * out at device resolution. Consumers that call `setDisplaySize` (nearly all of
+ * them) are unaffected; anything drawing a baked texture at its natural size has
+ * to divide by `RENDER_SCALE` itself.
  */
 function bake(
   scene: Phaser.Scene, key: string, w: number, h: number,
   draw: (ctx: CanvasRenderingContext2D, w: number, h: number) => void,
 ): void {
   if (scene.textures.exists(key)) scene.textures.remove(key);
-  const tex = scene.textures.createCanvas(key, w, h);
+  const tex = scene.textures.createCanvas(key, w * RENDER_SCALE, h * RENDER_SCALE);
   if (!tex) return;
-  draw(tex.getContext(), w, h);
+  const ctx = tex.getContext();
+  ctx.scale(RENDER_SCALE, RENDER_SCALE);
+  draw(ctx, w, h);
   tex.refresh();
 }
 
@@ -166,6 +179,51 @@ function drawChrome(
   ctx.fill();
   ctx.strokeStyle = hover ? rgba(color.goldBright, 0.95) : rgba(color.goldDim, 0.9);
   ctx.lineWidth = hover ? 3 : 2;
+  ctx.stroke();
+}
+
+/**
+ * The top-left HUD, as a single L-shaped piece of chrome rather than two panels
+ * pushed together. It is welded to the top and left edges of the frame, runs the
+ * full {@link chrome.hudHeight} for the wallet, then steps down to
+ * {@link chrome.progressHeight} at `stepX` for the progress bar.
+ *
+ *   (0,0) ─────────────────────── (w,0)
+ *     │                              │
+ *     │            progress strip    ╯ step, rounded
+ *     │        ╭─────────────────────
+ *   wallet     │  <- square inner corner
+ *     │        │
+ *     ╰────────╯ rounded
+ *
+ * Drawing it as one path is the whole point: there is no interior edge, so no
+ * doubled gold rim and no seam line to suppress. That also leaves the shared
+ * {@link drawChrome} helper — which `BackTab` depends on — untouched.
+ */
+function drawHudChrome(
+  ctx: CanvasRenderingContext2D, w: number, h: number, stepX: number, stepH: number,
+): void {
+  const i = 1; // keep the 2px stroke inside the canvas
+  const r = chrome.radius;
+
+  ctx.beginPath();
+  ctx.moveTo(i, i);
+  ctx.lineTo(w - i, i);
+  ctx.lineTo(w - i, stepH - i - r);
+  ctx.arcTo(w - i, stepH - i, w - i - r, stepH - i, r);
+  ctx.lineTo(stepX, stepH - i);
+  ctx.lineTo(stepX, h - i - r);
+  ctx.arcTo(stepX, h - i, stepX - r, h - i, r);
+  ctx.lineTo(i, h - i);
+  ctx.closePath();
+
+  const grad = ctx.createLinearGradient(0, 0, 0, h);
+  grad.addColorStop(0, rgba(color.panel, 0.97));
+  grad.addColorStop(1, rgba(color.feltEdge, 0.97));
+  ctx.fillStyle = grad;
+  ctx.fill();
+  ctx.strokeStyle = rgba(color.goldDim, 0.9);
+  ctx.lineWidth = 2;
   ctx.stroke();
 }
 
@@ -319,10 +377,8 @@ function bakeCardArt(
 function bakeUiTextures(scene: Phaser.Scene): void {
   // --- Screen-edge chrome. Square where it meets the frame, rounded inward. ---
   const r = chrome.radius;
-  bake(scene, TEX.walletPanel, chrome.walletWidth, chrome.hudHeight,
-    (ctx, w, h) => drawChrome(ctx, w, h, [0, 0, r, 0]));
-  bake(scene, TEX.progressPanel, chrome.progressWidth, chrome.hudHeight,
-    (ctx, w, h) => drawChrome(ctx, w, h, [0, 0, r, r]));
+  bake(scene, TEX.hudChrome, chrome.walletWidth + chrome.progressWidth, chrome.hudHeight,
+    (ctx, w, h) => drawHudChrome(ctx, w, h, chrome.walletWidth, chrome.progressHeight));
   bake(scene, TEX.backTab, chrome.backWidth, chrome.backHeight,
     (ctx, w, h) => drawChrome(ctx, w, h, [0, r, 0, 0]));
   bake(scene, TEX.backTabHover, chrome.backWidth, chrome.backHeight,
@@ -575,7 +631,7 @@ function bakeDisc(scene: Phaser.Scene, key: string, r: number, c: number): void 
 }
 
 export function bakeAll(scene: Phaser.Scene): void {
-  bakeBackdrop(scene, scene.scale.width, scene.scale.height);
+  bakeBackdrop(scene, GAME_WIDTH, GAME_HEIGHT);
   for (const s of SLOT_SYMBOLS) {
     bakeSymbolTile(scene, symbolTextureKey(s), symbolStyle(s).color);
   }

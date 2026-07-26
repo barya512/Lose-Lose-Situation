@@ -1,6 +1,11 @@
 import Phaser from 'phaser';
 import { TEX } from './assets';
 import { WIN_JUICE_CHANCE, rollChance } from './config';
+import { GAME_WIDTH, GAME_HEIGHT, RENDER_SCALE } from './viewport';
+
+/** Baked textures come out RENDER_SCALE times oversized; particles set a raw
+ *  scale rather than a display size, so they have to divide it back out. */
+const PARTICLE = 1 / RENDER_SCALE;
 
 type JuiceTarget = Phaser.GameObjects.GameObject &
   Phaser.GameObjects.Components.Transform;
@@ -24,7 +29,7 @@ export const juice = {
       gravityY: 700,
       lifespan: 900,
       quantity: 24,
-      scale: { start: 1.2, end: 0 },
+      scale: { start: 1.2 * PARTICLE, end: 0 },
       emitting: false,
     });
     emitter.explode(24);
@@ -74,12 +79,12 @@ export const juice = {
 
   glitch(scene: Phaser.Scene): void {
     const cam = scene.cameras.main;
-    const emitter = scene.add.particles(scene.scale.width / 2, scene.scale.height / 2, TEX.glitch, {
+    const emitter = scene.add.particles(GAME_WIDTH / 2, GAME_HEIGHT / 2, TEX.glitch, {
       speed: { min: 100, max: 500 },
       lifespan: 400,
       quantity: 30,
-      scaleX: { start: 3, end: 0 },
-      scaleY: { start: 0.6, end: 0 },
+      scaleX: { start: 3 * PARTICLE, end: 0 },
+      scaleY: { start: 0.6 * PARTICLE, end: 0 },
       emitting: false,
     });
     emitter.explode(30);

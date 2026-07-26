@@ -45,7 +45,9 @@ texture key — the checkboxes track real hand-authored art replacing a bake.
 Self-hosted, latin subset, SIL Open Font License. Declared in
 [`client/src/styles/fonts.css`](../client/src/styles/fonts.css) and awaited by
 `BootScene` before the first scene draws (see
-[ADR 0005](adr/0005-canvas-baked-token-driven-theme.md)).
+[ADR 0005](adr/0005-canvas-baked-token-driven-theme.md)). Bake sizes are given in
+authored 720p units; the canvas underneath is twice that
+([ADR 0006](adr/0006-2x-render-scale.md)).
 
 | File | Family / axis | Used for |
 |------|---------------|----------|

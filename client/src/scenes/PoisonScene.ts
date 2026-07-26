@@ -8,6 +8,7 @@ import { TEX } from '../core/assets';
 import { api, ApiError } from '../core/api';
 import { session } from '../core/session';
 import { chrome, text } from '../core/theme';
+import { GAME_WIDTH, fitCamera } from '../core/viewport';
 
 /** Where the orbs sit on the table. High enough that the tallest orb's hover
  * caption still clears the toast line below. */
@@ -32,7 +33,8 @@ export class PoisonScene extends Phaser.Scene {
   }
 
   create(): void {
-    const cx = this.scale.width / 2;
+    const cx = GAME_WIDTH / 2;
+    fitCamera(this);
     paintBackdrop(this);
     mountTopHud(this);
 
