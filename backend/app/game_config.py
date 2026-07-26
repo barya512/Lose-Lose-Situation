@@ -58,7 +58,7 @@ class Economy(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="ECON_", extra="ignore")
 
     # --- Wallet ---
-    STARTING_BALANCE_CENTS: int = 1_000_00  # $X — money each new player starts with
+    STARTING_BALANCE_CENTS: int = 1_500_00  # $X — money each new player starts with
     WIN_TARGET_CENTS: int = 0  # reaching this = you WIN the game (lose all money)
 
     # --- Beer (consumable: costs money, does nothing — a pure, thematic drain) ---

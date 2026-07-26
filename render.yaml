@@ -35,6 +35,9 @@ services:
     runtime: image
     image:
       url: docker.io/library/rabbitmq:3-management
+    # Without this, Render's auto-detected `hostport` picks the image's first
+    # EXPOSEd port (4369, epmd) instead of the AMQP port aio_pika needs.
+    port: 5672
     plan: starter
     disk:
       name: rabbitmq-data
