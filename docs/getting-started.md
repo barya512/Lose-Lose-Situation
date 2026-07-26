@@ -87,7 +87,10 @@ Title ──click──▶ Menu (auth) ──▶ Poison ──┬─ beer orb   
     stake chip, a direction (UP/DOWN) and a
     timeframe (1 min / 5 min / 1 hour). Bets resolve in the background — you can
     leave the screen and come back — and one bet per symbol is open at a time.
-    Stocks are only bettable during their home exchange's trading hours.
+    Stocks are only bettable during their home exchange's trading hours, and
+    open markets sort above closed ones — both within a section and across them,
+    so at night crypto rises to the top. The order updates as exchanges open and
+    close under you.
   - **Casino** — three worn cards deal onto the table. **SLOTS** is playable;
     roulette and blackjack are styled but disabled (they toast "isn't dealt in
     yet").

@@ -264,6 +264,25 @@ export function mountMarketPanel(onBack: () => void, effects: MarketPanelEffects
     row.badgeEl.style.cssText = 'font-size:11px;padding:3px 8px;border-radius:6px;' + badgeStyle(row.ticker.is_open);
   }
 
+  // Open markets float to the top — both the sections and the rows inside them
+  // — so what you can actually bet on is never buried under what's shut (at
+  // night that would be the whole stock list sitting above crypto). Done with
+  // the CSS `order` property rather than by moving nodes: both containers are
+  // flex columns, and re-parenting a row would re-parent its TradingView
+  // iframe, which makes the browser reload the chart. Ties fall back to DOM
+  // order, i.e. the declaration order in SECTIONS.
+  const sectionEls: { symbols: string[]; secEl: HTMLElement }[] = [];
+
+  function resortByOpenness(): void {
+    for (const row of rows.values()) {
+      row.rowEl.style.order = row.ticker.is_open ? '0' : '1';
+    }
+    for (const { symbols, secEl } of sectionEls) {
+      const anyOpen = symbols.some((s) => rows.get(s)?.ticker.is_open);
+      secEl.style.order = anyOpen ? '0' : '1';
+    }
+  }
+
   let tickersBuilt = false;
   async function refreshTickers(): Promise<void> {
     let list: MarketTicker[];
@@ -285,11 +304,11 @@ export function mountMarketPanel(onBack: () => void, effects: MarketPanelEffects
         const secRows = el('div', 'display:flex;flex-direction:column;gap:10px;');
         secEl.append(secRows);
         sectionsEl.append(secEl);
+        sectionEls.push({ symbols: section.symbols, secEl });
 
         const inSection = section.symbols
           .map((s) => bySymbol.get(s))
-          .filter((t): t is MarketTicker => t !== undefined)
-          .sort((a, b) => Number(b.is_open) - Number(a.is_open));
+          .filter((t): t is MarketTicker => t !== undefined);
         for (const t of inSection) {
           const row = buildRow(secRows, t);
           rows.set(t.symbol, row);
@@ -304,6 +323,9 @@ export function mountMarketPanel(onBack: () => void, effects: MarketPanelEffects
         renderRowData(row);
       }
     }
+    // Every poll, not just the first build: exchanges open and close while the
+    // player is sitting on this screen.
+    resortByOpenness();
   }
 
   // --- pending bets ------------------------------------------------------
