@@ -28,6 +28,7 @@ export class WinScene extends Phaser.Scene {
 
     new Button(this, cx, 460, 'PLAY AGAIN', () => {
       session.clear();
+      audio.playTheme(this);
       this.scene.start('Menu');
     }, { width: 300 });
   }

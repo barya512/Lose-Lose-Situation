@@ -65,9 +65,12 @@ export const audio = {
   stopTheme(): void {
     musicTrack?.stop();
   },
-  // Player's winning screen stinger — replaces the theme.
+  // Player's winning screen stinger — replaces the theme. Tracked in the same
+  // musicTrack slot as the theme so a later playTheme()/stopTheme() (e.g. on
+  // "play again") stops it instead of leaving it playing forever.
   playWinTheme(scene: Phaser.Scene): void {
     audio.stopTheme();
-    scene.sound.add(MUSIC.win, { volume: 0.6 }).play();
+    musicTrack = scene.sound.add(MUSIC.win, { volume: 0.6 });
+    musicTrack.play();
   },
 };
