@@ -25,9 +25,12 @@ _connection: aio_pika.abc.AbstractRobustConnection | None = None
 async def get_connection() -> aio_pika.abc.AbstractRobustConnection:
     global _connection
     if _connection is None or _connection.is_closed:
+        url = settings.rabbitmq_url or ""
+        masked = url.replace(settings.rabbitmq_password, "***") if settings.rabbitmq_password else url
         log.info(
-            "Connecting to RabbitMQ: host=%r user=%r (from RABBITMQ_HOST/RABBITMQ_USER)",
+            "Connecting to RabbitMQ: host=%r user=%r password_len=%d url=%r",
             settings.rabbitmq_host, settings.rabbitmq_user,
+            len(settings.rabbitmq_password or ""), masked,
         )
         _connection = await aio_pika.connect_robust(settings.rabbitmq_url)
     return _connection
