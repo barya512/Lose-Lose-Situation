@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import './styles/fonts.css';
 import { BootScene } from './scenes/BootScene';
 import { TitleScene } from './scenes/TitleScene';
 import { MenuScene } from './scenes/MenuScene';
@@ -8,6 +9,7 @@ import { SlotsScene } from './scenes/SlotsScene';
 import { MarketScene } from './scenes/MarketScene';
 import { WinScene } from './scenes/WinScene';
 import { session } from './core/session';
+import { css } from './core/theme';
 
 export const GAME_WIDTH = 1280;
 export const GAME_HEIGHT = 720;
@@ -15,7 +17,9 @@ export const GAME_HEIGHT = 720;
 const game = new Phaser.Game({
   type: Phaser.AUTO,
   parent: 'game',
-  backgroundColor: '#0a0410',
+  // Shows through as the FIT-mode letterbox bars, so it matches the felt's
+  // vignetted edge rather than flashing an unrelated colour.
+  backgroundColor: css.feltEdge,
   scale: {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,

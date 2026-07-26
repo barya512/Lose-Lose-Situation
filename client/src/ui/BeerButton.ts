@@ -1,7 +1,8 @@
 import Phaser from 'phaser';
-import { Orb } from './Orb';
+import { Orb, type OrbOpts } from './Orb';
 import { TEX } from '../core/assets';
 import { audio } from '../core/audio';
+import { color } from '../core/theme';
 
 const COOLDOWN_MS = 2000;
 
@@ -19,10 +20,10 @@ export class BeerButton extends Orb {
 
   constructor(
     scene: Phaser.Scene, x: number, y: number,
-    activate: () => void | Promise<void>, opts: { radius?: number } = {},
+    activate: () => void | Promise<void>, opts: Pick<OrbOpts, 'radius' | 'description'> = {},
   ) {
     const r = opts.radius ?? 90;
-    super(scene, x, y, TEX.orbBeer, 'BEER', () => {}, { radius: r });
+    super(scene, x, y, TEX.orbBeer, 'BEER', () => {}, { radius: r, description: opts.description });
     this.radius = r;
     this.overlay = scene.add.graphics();
     this.add(this.overlay);
@@ -60,7 +61,7 @@ export class BeerButton extends Orb {
     if (remaining <= 0) return;
     const start = -Math.PI / 2;
     const end = start + remaining * Math.PI * 2;
-    this.overlay.fillStyle(0x0a0410, 0.6);
+    this.overlay.fillStyle(color.shadow, 0.65);
     this.overlay.slice(0, 0, this.radius, start, end, false);
     this.overlay.fillPath();
   }

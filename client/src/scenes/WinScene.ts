@@ -1,5 +1,7 @@
 import Phaser from 'phaser';
 import { Button } from '../ui/Button';
+import { paintBackdrop } from '../ui/Backdrop';
+import { css, font, text } from '../core/theme';
 import { session } from '../core/session';
 import { audio } from '../core/audio';
 
@@ -10,14 +12,16 @@ export class WinScene extends Phaser.Scene {
 
   create(): void {
     const cx = this.scale.width / 2;
-    this.cameras.main.setBackgroundColor('#0a0410');
+    paintBackdrop(this);
     audio.playWinTheme(this);
 
     this.add.text(cx, 220, 'YOU LOST EVERYTHING.', {
-      fontSize: '52px', color: '#3ddc84', fontStyle: 'bold',
+      ...text.heading, fontSize: '46px', color: css.cream,
     }).setOrigin(0.5);
-    this.add.text(cx, 300, 'YOU WIN.', {
-      fontSize: '72px', color: '#ff3ea5', fontStyle: 'bold',
+
+    this.add.text(cx, 310, 'YOU WIN.', {
+      fontFamily: font.display, fontSize: '78px', fontStyle: '700',
+      color: css.gold, letterSpacing: 4,
     }).setOrigin(0.5);
 
     new Button(this, cx, 460, 'PLAY AGAIN', () => {

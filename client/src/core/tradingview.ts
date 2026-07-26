@@ -5,6 +5,8 @@
 // against. Anything unmapped (or that fails to load) falls back to plain text
 // instead of a broken iframe.
 
+import { css, font } from './theme';
+
 const SYMBOL_MAP: Record<string, string> = {
   AAPL: 'NASDAQ:AAPL',
   MSFT: 'NASDAQ:MSFT',
@@ -39,7 +41,7 @@ function showFallback(container: HTMLElement): void {
   div.textContent = 'chart unavailable';
   div.style.cssText =
     'width:100%;height:100%;display:flex;align-items:center;justify-content:center;' +
-    'color:#6c5a80;font-size:11px;font-style:italic;';
+    `color:${css.creamDim};font-family:${font.ui};font-size:11px;font-style:italic;`;
   container.appendChild(div);
 }
 

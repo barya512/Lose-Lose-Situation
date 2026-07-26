@@ -1,5 +1,7 @@
 import Phaser from 'phaser';
 import { Button } from '../ui/Button';
+import { paintBackdrop } from '../ui/Backdrop';
+import { text } from '../core/theme';
 import { showAuthForm } from '../ui/authForm';
 import { api, ApiError } from '../core/api';
 import { session } from '../core/session';
@@ -14,15 +16,15 @@ export class MenuScene extends Phaser.Scene {
 
   create(): void {
     const cx = this.scale.width / 2;
-    this.add.text(cx, 140, 'CHOOSE YOUR RUIN', {
-      fontSize: '40px', color: '#ff3ea5', fontStyle: 'bold',
-    }).setOrigin(0.5);
+    paintBackdrop(this);
+
+    this.add.text(cx, 140, 'CHOOSE YOUR RUIN', text.heading).setOrigin(0.5);
 
     new Button(this, cx, 280, 'PLAY AS GUEST', () => this.guest(), { width: 320 });
     new Button(this, cx, 360, 'LOGIN', () => this.authForm('LOGIN', api.login), { width: 320 });
     new Button(this, cx, 440, 'REGISTER', () => this.authForm('REGISTER', api.register), { width: 320 });
 
-    this.status = this.add.text(cx, 540, '', { fontSize: '20px', color: '#ff6b6b' }).setOrigin(0.5);
+    this.status = this.add.text(cx, 540, '', text.toast).setOrigin(0.5);
   }
 
   private enter(result: TokenResult): void {

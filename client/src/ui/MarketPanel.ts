@@ -6,6 +6,8 @@
 // scale/resize would be far more fragile than a normal scrollable <div> list.
 import { api, ApiError } from '../core/api';
 import { session } from '../core/session';
+import { dollars } from '../core/money';
+import { css, font, outcomeCss } from '../core/theme';
 import { mountMiniChart } from '../core/tradingview';
 import type { MarketBet, MarketDirection, MarketTicker } from '../core/types';
 
@@ -25,10 +27,6 @@ const SECTIONS: { title: string; symbols: string[] }[] = [
 const TICKER_POLL_MS = 10_000;
 const BETS_POLL_MS = 5_000;
 const COUNTDOWN_TICK_MS = 1_000;
-
-function dollars(cents: number): string {
-  return `$${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
 
 function fmtPrice(p: number | null): string {
   return p === null ? '—' : p.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -73,17 +71,19 @@ export function mountMarketPanel(onBack: () => void, effects: MarketPanelEffects
   let alive = true;
 
   const wrap = el('div',
-    'position:fixed;inset:0;overflow-y:auto;background:#0a0410;color:#fff;' +
-    'font-family:sans-serif;padding:20px 20px 60px;box-sizing:border-box;');
+    `position:fixed;inset:0;overflow-y:auto;background:${css.feltEdge};color:${css.cream};` +
+    `font-family:${font.ui};padding:20px 20px 60px;box-sizing:border-box;`);
 
   const header = el('div', 'display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;');
   header.append(
-    el('div', 'color:#ff3ea5;font-size:28px;font-weight:bold;', 'MARKET'),
-    makeButton('← BACK', 'background:#3a2456;color:#fff;padding:10px 18px;', () => onBack()),
+    el('div', `color:${css.gold};font-family:${font.display};font-size:30px;font-weight:700;`, 'MARKET'),
+    makeButton('← BACK',
+      `background:${css.panel};border:1px solid ${css.goldDim};color:${css.cream};padding:10px 18px;`,
+      () => onBack()),
   );
   wrap.append(header);
 
-  const balanceEl = el('div', 'color:#b197fc;font-size:15px;margin-bottom:20px;');
+  const balanceEl = el('div', `color:${css.creamDim};font-size:15px;margin-bottom:20px;`);
   wrap.append(balanceEl);
   const renderBalance = (): void => {
     balanceEl.textContent = `balance: ${dollars(session.user?.balance_cents ?? 0)}`;
@@ -91,11 +91,11 @@ export function mountMarketPanel(onBack: () => void, effects: MarketPanelEffects
   renderBalance();
   const unsubBalance = session.onChange(renderBalance);
 
-  const pendingTitle = el('div', 'color:#74c0fc;font-size:15px;font-weight:bold;margin-bottom:8px;display:none;', 'PENDING BETS');
+  const pendingTitle = el('div', `color:${css.gold};font-size:14px;font-weight:600;letter-spacing:3px;margin-bottom:8px;display:none;`, 'PENDING BETS');
   const pendingList = el('div', 'display:flex;flex-direction:column;gap:8px;margin-bottom:20px;');
   wrap.append(pendingTitle, pendingList);
 
-  const statusEl = el('div', 'color:#6c5a80;font-size:14px;padding:20px 0;', 'loading tickers…');
+  const statusEl = el('div', `color:${css.creamDim};font-size:14px;padding:20px 0;`, 'loading tickers…');
   const sectionsEl = el('div', 'display:flex;flex-direction:column;gap:24px;');
   wrap.append(statusEl, sectionsEl);
 
@@ -107,9 +107,10 @@ export function mountMarketPanel(onBack: () => void, effects: MarketPanelEffects
   let expandedSymbol: string | null = null;
 
   function badgeStyle(open: boolean): string {
+    // Open/closed is plumbing, not an outcome — gold, not reward-gold semantics.
     return open
-      ? 'color:#3ddc84;border:1px solid #3ddc84;'
-      : 'color:#6c5a80;border:1px solid #6c5a80;';
+      ? `color:${css.gold};border:1px solid ${css.goldDim};`
+      : `color:${css.creamDim};border:1px solid ${css.creamDim};`;
   }
 
   function collapseRow(row: RowState): void {
@@ -137,7 +138,7 @@ export function mountMarketPanel(onBack: () => void, effects: MarketPanelEffects
   function buildDrawer(row: RowState): void {
     row.drawerEl.innerHTML = '';
     if (!row.ticker.is_open) {
-      row.drawerEl.append(el('div', 'color:#6c5a80;font-size:13px;padding:12px 0;', 'market closed — betting disabled'));
+      row.drawerEl.append(el('div', `color:${css.creamDim};font-size:13px;padding:12px 0;`, 'market closed — betting disabled'));
       return;
     }
 
@@ -184,10 +185,10 @@ export function mountMarketPanel(onBack: () => void, effects: MarketPanelEffects
     });
     tfButtons.forEach(({ s, btn }) => setSelected(btn, s === timeframeS));
 
-    const errorEl = el('div', 'color:#ff6b6b;font-size:13px;min-height:18px;margin-top:6px;');
-    const confirmBtn = makeButton('PLACE BET', 'background:#ff3ea5;color:#fff;padding:10px 20px;margin-top:4px;', () => {
-      void placeBet();
-    });
+    const errorEl = el('div', `color:${css.redBright};font-size:13px;min-height:18px;margin-top:6px;`);
+    const confirmBtn = makeButton('PLACE BET',
+      `background:${css.gold};color:${css.ink};padding:10px 20px;margin-top:4px;`,
+      () => { void placeBet(); });
 
     async function placeBet(): Promise<void> {
       confirmBtn.disabled = true;
@@ -208,14 +209,15 @@ export function mountMarketPanel(onBack: () => void, effects: MarketPanelEffects
   }
 
   function setSelected(btn: HTMLButtonElement, selected: boolean): void {
-    btn.style.background = selected ? '#ff3ea5' : '#3a2456';
-    btn.style.color = '#fff';
+    btn.style.background = selected ? css.gold : css.panel;
+    btn.style.color = selected ? css.ink : css.cream;
+    btn.style.border = `1px solid ${css.goldDim}`;
   }
 
   let chartSlot = 0;
 
   function buildRow(container: HTMLElement, ticker: MarketTicker): RowState {
-    const rowEl = el('div', 'background:#170a26;border-radius:12px;padding:14px 16px;');
+    const rowEl = el('div', `background:${css.panel};border:1px solid ${css.goldDim}44;border-radius:12px;padding:14px 16px;`);
     const headEl = el('div', 'display:flex;align-items:center;gap:12px;cursor:pointer;');
     const nameEl = el('div', 'flex:1;font-size:15px;font-weight:bold;');
     const priceEl = el('div', 'font-size:15px;color:#fff;min-width:90px;text-align:right;');
@@ -261,7 +263,7 @@ export function mountMarketPanel(onBack: () => void, effects: MarketPanelEffects
       tickersBuilt = true;
       for (const section of SECTIONS) {
         const secEl = el('div', '');
-        secEl.append(el('div', 'color:#b197fc;font-size:14px;font-weight:bold;margin-bottom:10px;letter-spacing:1px;', section.title));
+        secEl.append(el('div', `color:${css.gold};font-size:13px;font-weight:600;margin-bottom:10px;letter-spacing:4px;`, section.title));
         const secRows = el('div', 'display:flex;flex-direction:column;gap:10px;');
         secEl.append(secRows);
         sectionsEl.append(secEl);
@@ -295,11 +297,11 @@ export function mountMarketPanel(onBack: () => void, effects: MarketPanelEffects
     pendingList.innerHTML = '';
     pendingTitle.style.display = pendingBets.length ? 'block' : 'none';
     for (const bet of pendingBets) {
-      const rowEl = el('div', 'background:#170a26;border-radius:10px;padding:10px 14px;font-size:13px;');
+      const rowEl = el('div', `background:${css.panel};border:1px solid ${css.goldDim}44;border-radius:10px;padding:10px 14px;font-size:13px;`);
       rowEl.dataset.betId = bet.id;
 
       const topLine = el('div', 'display:flex;align-items:center;gap:12px;');
-      const timerEl = el('div', 'color:#74c0fc;min-width:70px;text-align:right;');
+      const timerEl = el('div', `color:${css.gold};min-width:70px;text-align:right;`);
       timerEl.dataset.role = 'timer';
       topLine.append(
         el('div', 'flex:1;', `${bet.ticker} · ${bet.direction} · ${dollars(bet.stake_cents)}`),
@@ -307,7 +309,7 @@ export function mountMarketPanel(onBack: () => void, effects: MarketPanelEffects
       );
 
       const priceLine = el('div',
-        'display:flex;align-items:center;gap:8px;margin-top:6px;font-size:12px;color:#6c5a80;');
+        `display:flex;align-items:center;gap:8px;margin-top:6px;font-size:12px;color:${css.creamDim};`);
       const nowEl = el('span', 'font-weight:bold;');
       nowEl.dataset.role = 'now';
       const statusEl = el('span', '');
@@ -324,9 +326,9 @@ export function mountMarketPanel(onBack: () => void, effects: MarketPanelEffects
     tickCountdowns();
   }
 
-  // Colors match the inverted win/loss juice used elsewhere (SlotsScene,
-  // MarketScene effects): green = good for the player (heading to a LOSS),
-  // pink = bad for the player (heading to a WIN).
+  // Colours match the inverted win/loss juice used elsewhere (SlotsScene,
+  // MarketScene effects): gold = good for the player (heading to a LOSS),
+  // red = bad for the player (heading to a WIN). See theme.outcome.
   function tickCountdowns(): void {
     const now = Date.now();
     for (const bet of pendingBets) {
@@ -354,7 +356,7 @@ export function mountMarketPanel(onBack: () => void, effects: MarketPanelEffects
       nowEl.textContent = fmtPrice(currentPrice);
       const actualDirection = currentPrice >= bet.start_price ? 'UP' : 'DOWN';
       const onTrackToWin = bet.direction === actualDirection;
-      const color = onTrackToWin ? '#ff3ea5' : '#3ddc84';
+      const color = onTrackToWin ? outcomeCss.punish : outcomeCss.reward;
       nowEl.style.color = color;
       statusEl.textContent = onTrackToWin ? 'WINNING (bad)' : 'LOSING (good)';
       statusEl.style.cssText = `font-size:11px;padding:2px 6px;border-radius:5px;color:${color};border:1px solid ${color};`;

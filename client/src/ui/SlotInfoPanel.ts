@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { TEX, symbolIconKey, type SlotSymbol } from '../core/assets';
+import { css, text } from '../core/theme';
 import type { SlotInfo } from '../core/types';
 
 const PANEL_WIDTH = 240;
@@ -23,7 +24,7 @@ export class SlotInfoPanel extends Phaser.GameObjects.Container {
 
     this.bg = scene.add.image(0, 0, TEX.panel).setDisplaySize(PANEL_WIDTH, panelHeight);
     this.status = scene.add
-      .text(0, 0, 'loading paytable…', { fontSize: '15px', color: '#b197fc' })
+      .text(0, 0, 'loading paytable…', { ...text.body, fontSize: '15px' })
       .setOrigin(0.5);
     this.content = scene.add.container(0, 0);
 
@@ -52,7 +53,7 @@ export class SlotInfoPanel extends Phaser.GameObjects.Container {
     let y = -this.panelHeight / 2 + 22;
 
     const title = this.scene.add.text(0, y, 'PAYTABLE', {
-      fontSize: '20px', color: '#ff3ea5', fontStyle: 'bold',
+      ...text.label, fontSize: '18px', color: css.gold,
     }).setOrigin(0.5, 0);
     this.content.add(title);
     y += 34;
@@ -60,13 +61,13 @@ export class SlotInfoPanel extends Phaser.GameObjects.Container {
     const intro = this.scene.add.text(left, y,
       'This game is rigged in reverse: matching symbols pay OUT, which GROWS your ' +
       'balance. A losing spin is the win you actually want.',
-      { fontSize: '13px', color: '#74c0fc', wordWrap: { width: wrapWidth } },
+      { ...text.body, fontSize: '13px', wordWrap: { width: wrapWidth } },
     );
     this.content.add(intro);
     y += intro.height + 16;
 
     const sub1 = this.scene.add.text(left, y, '3 of a kind', {
-      fontSize: '14px', color: '#b197fc', fontStyle: 'bold',
+      ...text.label, fontSize: '13px', color: css.gold,
     });
     this.content.add(sub1);
     y += sub1.height + 8;
@@ -77,7 +78,7 @@ export class SlotInfoPanel extends Phaser.GameObjects.Container {
       const label = this.scene.add.text(
         left + ICON_SIZE + 10, y + ICON_SIZE / 2,
         `×${fmtMult(row.three_of_a_kind_payout)}`,
-        { fontSize: '15px', color: '#ffffff' },
+        { ...text.body, fontSize: '15px', color: css.cream },
       ).setOrigin(0, 0.5);
       this.content.add([icon, label]);
       y += ROW_HEIGHT;
@@ -85,16 +86,16 @@ export class SlotInfoPanel extends Phaser.GameObjects.Container {
 
     y += 6;
     const sub2 = this.scene.add.text(left, y, 'Any pair', {
-      fontSize: '14px', color: '#b197fc', fontStyle: 'bold',
+      ...text.label, fontSize: '13px', color: css.gold,
     });
     this.content.add(sub2);
     y += sub2.height + 8;
 
     const disabled = info.two_of_a_kind_disabled_reel_counts.includes(this.reelCount);
-    const pairColor = disabled ? '#5a4a72' : '#ffffff';
+    const pairColor = disabled ? css.inkSoft : css.cream;
     const pairLine = this.scene.add.text(left, y,
       `×${fmtMult(info.two_of_a_kind_payout)}${disabled ? '  (off at ' + this.reelCount + ' reels)' : ''}`,
-      { fontSize: '15px', color: pairColor, wordWrap: { width: wrapWidth } },
+      { ...text.body, fontSize: '15px', color: pairColor, wordWrap: { width: wrapWidth } },
     );
     this.content.add(pairLine);
     y += pairLine.height + 10;
@@ -102,7 +103,7 @@ export class SlotInfoPanel extends Phaser.GameObjects.Container {
     if (disabled) {
       const note = this.scene.add.text(left, y,
         `At ${this.reelCount} reels a pair is nearly guaranteed, so it no longer pays.`,
-        { fontSize: '12px', color: '#5a4a72', wordWrap: { width: wrapWidth } },
+        { ...text.body, fontSize: '12px', color: css.inkSoft, wordWrap: { width: wrapWidth } },
       );
       this.content.add(note);
     }

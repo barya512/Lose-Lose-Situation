@@ -1,3 +1,5 @@
+import { css, font } from '../core/theme';
+
 // Minimal DOM overlay for username/password entry over the Phaser canvas.
 // onSubmit resolves to an error string to display in-modal (form stays open),
 // or null on success (onSubmit is responsible for tearing the form down).
@@ -10,7 +12,7 @@ export function showAuthForm(
   const wrap = document.createElement('div');
   wrap.style.cssText =
     'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;' +
-    'background:rgba(10,4,16,0.85);z-index:10;font-family:sans-serif;';
+    `background:rgba(6,26,18,0.88);z-index:10;font-family:${font.ui};`; // theme.color.shadow
   // The overlay covers the whole viewport over a live Phaser scene. Phaser
   // attaches its mouse listeners to `window`, so trap the modal's own mouse
   // events here to stop them bubbling through to the buttons behind the form.
@@ -22,7 +24,9 @@ export function showAuthForm(
 
   const heading = document.createElement('div');
   heading.textContent = title;
-  heading.style.cssText = 'color:#ff3ea5;font-size:24px;font-weight:bold;text-align:center;';
+  heading.style.cssText =
+    `color:${css.gold};font-family:${font.display};font-size:28px;font-weight:700;` +
+    'text-align:center;';
 
   const userInput = document.createElement('input');
   userInput.placeholder = 'username';
@@ -30,23 +34,28 @@ export function showAuthForm(
   passInput.placeholder = 'password';
   passInput.type = 'password';
   for (const el of [userInput, passInput]) {
-    el.style.cssText = 'padding:12px;font-size:16px;border-radius:8px;border:none;';
+    el.style.cssText =
+      `padding:12px;font-family:${font.ui};font-size:16px;border-radius:8px;` +
+      `border:1px solid ${css.goldDim};background:${css.cardFace};color:${css.ink};`;
   }
 
   const submit = document.createElement('button');
   submit.textContent = 'GO';
   submit.style.cssText =
-    'padding:12px;font-size:18px;font-weight:bold;border:none;border-radius:8px;' +
-    'background:#3a2456;color:#fff;cursor:pointer;';
+    `padding:12px;font-family:${font.ui};font-size:18px;font-weight:600;letter-spacing:3px;` +
+    `border:1px solid ${css.goldDim};border-radius:8px;` +
+    `background:${css.panel};color:${css.cream};cursor:pointer;`;
 
   const cancel = document.createElement('button');
   cancel.textContent = 'CANCEL';
   cancel.style.cssText =
-    'padding:8px;font-size:14px;border:none;border-radius:8px;background:transparent;' +
-    'color:#b197fc;cursor:pointer;';
+    `padding:8px;font-family:${font.ui};font-size:14px;border:none;border-radius:8px;` +
+    `background:transparent;color:${css.creamDim};cursor:pointer;`;
 
   const error = document.createElement('div');
-  error.style.cssText = 'color:#ff6b6b;font-size:14px;min-height:18px;text-align:center;';
+  error.style.cssText =
+    `color:${css.redBright};font-family:${font.ui};font-size:14px;min-height:18px;` +
+    'text-align:center;';
 
   const teardown = () => {
     document.removeEventListener('keydown', onKey);

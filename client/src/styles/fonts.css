@@ -1,0 +1,33 @@
+/* Self-hosted webfonts (SIL Open Font License), latin subset only.
+ *
+ * Both files are variable fonts, so one @font-face per style covers the whole
+ * weight range we use. Vite rewrites and fingerprints these url()s at build
+ * time, exactly as it does for the PNG/MP3 imports in core/assets.ts.
+ *
+ * `font-display: block` on purpose: BootScene waits for these to load before
+ * starting the first scene (Phaser bakes text with whatever font exists at
+ * creation time and never repaints), so a swap would never be seen anyway. */
+
+@font-face {
+  font-family: 'Playfair Display';
+  font-style: normal;
+  font-weight: 400 900;
+  font-display: block;
+  src: url('../../../assets/fonts/playfair-display-latin-var.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Playfair Display';
+  font-style: italic;
+  font-weight: 400 900;
+  font-display: block;
+  src: url('../../../assets/fonts/playfair-display-italic-latin-var.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: block;
+  src: url('../../../assets/fonts/inter-latin-var.woff2') format('woff2');
+}

@@ -1,8 +1,16 @@
 # Art & Audio Asset Checklist
 
-**Art direction:** Retro-casino × glitch-core — neon CRT palette, chunky
-pixel/vector hybrid, deliberate glitch artifacts when money is lost (leans into
-the inverted theme). Source files go in [`/assets`](../assets).
+**Art direction:** Casino felt table × Balatro — a green baize backdrop, gold and
+cream chrome, worn playing-card stock, and a display serif paired with a wide
+letterspaced sans. Deliberate glitch artifacts when money is *gained* (leans into
+the inverted theme). Palette and type live in
+[`client/src/core/theme.ts`](../client/src/core/theme.ts); see
+[visual-theme-design.md](visual-theme-design.md). Source files go in
+[`/assets`](../assets).
+
+Every visual below is currently **baked procedurally** at boot in
+[`client/src/core/assets.ts`](../client/src/core/assets.ts) and swappable by
+texture key — the checkboxes track real hand-authored art replacing a bake.
 
 ## Visual assets
 
@@ -23,6 +31,27 @@ the inverted theme). Source files go in [`/assets`](../assets).
 | Slot pull-lever | idle + pull anim (4–6 frames) | ☐ |
 | Slot "changing image" reaction (neutral / win / loss) | ~200×140, one per outcome state | ☐ |
 | Juice squash-stretch win FX | no texture (pure tween); optional spark/flash 32×32 atlas | ☐ |
+| Felt table backdrop | 1280×720; lit centre → vignetted edge, 26px dot grid, cloth noise | ☐ |
+| Top HUD panels (wallet, progress) | 264×92 and 300×92; gold rim, square where they meet the frame edge, rounded inward | ☐ |
+| Bottom-left back tab | 208×64; gold rim, only the top-right corner rounded | ☐ |
+| Button surface + hover variant | 256×72 pill, gold rim + top sheen; hover = brighter fill, `goldBright` rim | ☐ |
+| Bet orb + hover variant | 220×220 dark-glass sphere, gold rim, upper-left specular | ☐ |
+| Worn card face + hover variant | 300×420 aged cream stock, ink border, hairline inner frame, foxing speckle | ☐ |
+| Machine ink overlays (roulette ♦, blackjack ♥, slots ♠) | 300×420 transparent; corner suit indices (bottom one rotated) + central ink emblem | ☐ |
+| Slot symbol backing plates | 128×128; symbol-hued gradient, `goldDim` rim | ☐ |
+
+## Fonts
+
+Self-hosted, latin subset, SIL Open Font License. Declared in
+[`client/src/styles/fonts.css`](../client/src/styles/fonts.css) and awaited by
+`BootScene` before the first scene draws (see
+[ADR 0005](adr/0005-canvas-baked-token-driven-theme.md)).
+
+| File | Family / axis | Used for |
+|------|---------------|----------|
+| `assets/fonts/playfair-display-latin-var.woff2` | Playfair Display, wght 400–900 | titles, money, suit glyphs |
+| `assets/fonts/playfair-display-italic-latin-var.woff2` | Playfair Display italic | scene titles |
+| `assets/fonts/inter-latin-var.woff2` | Inter, wght 400–700 | labels, buttons, body |
 
 Item `art_key`s already referenced by the seed catalog: `item_leaky_wallet`,
 `item_moth_swarm`, `item_black_cat`, `item_broken_mirror`, `item_cursed_coin`,

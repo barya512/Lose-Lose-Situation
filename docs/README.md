@@ -4,6 +4,9 @@ A game where the objective is to **lose all your money**. Every mechanic is
 inverted: "winning" a bet grows your balance (bad), losing feels great, and
 reaching **$0 wins the game**.
 
+The vocabulary for all of that — bet vs machine, reward vs punish, run, stake —
+is pinned in [CONTEXT.md](../CONTEXT.md).
+
 ## Index
 
 | Doc | What's inside |
@@ -15,6 +18,8 @@ reaching **$0 wins the game**.
 | [api-reference.md](api-reference.md) | Every endpoint with example payloads |
 | [formula-cheatsheet.md](formula-cheatsheet.md) | ★ Every economy knob for playtesters |
 | [asset-list.md](asset-list.md) | Art + audio production checklist |
+| [gui-polish-design.md](gui-polish-design.md) | Poison hub, casino cards, slot relayout, win juice |
+| [visual-theme-design.md](visual-theme-design.md) | ★ The casino-felt look: palette, type, edge chrome |
 | [roadmap.md](roadmap.md) | Phased delivery plan + current status |
 | [adr/](adr/) | Architecture Decision Records |
 

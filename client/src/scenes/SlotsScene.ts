@@ -1,11 +1,14 @@
 import Phaser from 'phaser';
-import { WalletHud } from '../ui/WalletHud';
+import { mountTopHud } from '../ui/TopHud';
+import { BackTab } from '../ui/BackTab';
+import { paintBackdrop } from '../ui/Backdrop';
 import { Button } from '../ui/Button';
 import { SlotInfoPanel } from '../ui/SlotInfoPanel';
 import { api, ApiError } from '../core/api';
 import { session } from '../core/session';
 import { audio } from '../core/audio';
 import { juice } from '../core/juice';
+import { outcome, text } from '../core/theme';
 import { stepReelCount } from '../core/slotLogic';
 import {
   SLOT_SYMBOLS, SLOT_FRAME_INSET, TEX, symbolIconKey, symbolTextureKey,
@@ -54,10 +57,11 @@ export class SlotsScene extends Phaser.Scene {
 
     const cx = this.scale.width / 2;
     const machineX = cx + MACHINE_X_OFFSET;
-    new WalletHud(this, 60, 80);
+    paintBackdrop(this);
+    mountTopHud(this);
 
-    this.add.text(cx, 40, 'SLOTS', { fontSize: '32px', color: '#ff3ea5', fontStyle: 'bold' })
-      .setOrigin(0.5);
+    // Clear of the HUD panels, which now own the top 92px of the frame.
+    this.add.text(cx, 104, 'SLOTS', text.heading).setOrigin(0.5);
 
     // The machine as one container so juice can squash-and-stretch the whole unit.
     this.machine = this.add.container(machineX, MACHINE_Y);
@@ -75,28 +79,26 @@ export class SlotsScene extends Phaser.Scene {
       { width: 96, height: 120 });
 
     // +/- reel controls to the right of the reels.
-    this.add.text(1000, MACHINE_Y - 96, 'REELS', { fontSize: '16px', color: '#b197fc' })
-      .setOrigin(0.5);
+    this.add.text(1000, MACHINE_Y - 96, 'REELS', text.label).setOrigin(0.5);
     this.plusBtn = new Button(this, 1000, MACHINE_Y - 48, '+', () => this.changeReels(+1),
       { width: 64, height: 56 });
     this.reelCountText = this.add.text(1000, MACHINE_Y + 8, String(this.reelCount), {
-      fontSize: '30px', color: '#ffffff', fontStyle: 'bold',
+      ...text.money, fontSize: '30px',
     }).setOrigin(0.5);
     this.minusBtn = new Button(this, 1000, MACHINE_Y + 64, '-', () => this.changeReels(-1),
       { width: 64, height: 56 });
 
     // Stake chips.
-    this.add.text(cx, 490, 'STAKE', { fontSize: '18px', color: '#b197fc' }).setOrigin(0.5);
+    this.add.text(cx, 490, 'STAKE', text.label).setOrigin(0.5);
     STAKE_CHIPS.forEach((cents, i) => {
       const x = cx - 255 + i * 170;
       const btn = new Button(this, x, 540, `$${cents / 100}`, () => this.pickStake(cents), { width: 150 });
       this.chipButtons.push({ cents, btn });
     });
 
-    this.toast = this.add.text(cx, 610, '', { fontSize: '20px', color: '#ff6b6b' }).setOrigin(0.5);
+    this.toast = this.add.text(cx, 620, '', text.toast).setOrigin(0.5);
 
-    new Button(this, 120, 660, 'go back?', () => this.scene.start('Casino'),
-      { width: 180, height: 56 });
+    new BackTab(this, 'go back?', () => this.scene.start('Casino'));
 
     this.infoPanel = new SlotInfoPanel(this, this.scale.width - 140, 380, 560);
     api.slotsInfo()
@@ -220,7 +222,7 @@ export class SlotsScene extends Phaser.Scene {
       if (result.status === 'LOST') {
         // GOOD outcome: money lost is the goal.
         this.showReaction(TEX.reactionWin);
-        juice.flash(this, 0x3ddc84);
+        juice.flash(this, outcome.reward);
         juice.coinBurst(this, this.machine.x, MACHINE_Y);
         juice.shake(this);
         juice.winReaction(this, this.machine); // probabilistic squash-and-stretch
@@ -229,7 +231,7 @@ export class SlotsScene extends Phaser.Scene {
         // BAD outcome: money gained.
         this.showReaction(TEX.reactionLoss);
         juice.glitch(this);
-        juice.flash(this, 0xff3ea5);
+        juice.flash(this, outcome.punish);
         audio.playGainPunish();
       }
     } catch (e) {
