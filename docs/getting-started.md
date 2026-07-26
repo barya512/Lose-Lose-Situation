@@ -82,7 +82,9 @@ Title ──click──▶ Menu (auth) ──▶ Poison ──┬─ beer orb   
     radial-wipe cooldown. The cheapest possible drain.
   - **Market** — a DOM panel over the felt: 15 tickers in four sections
     (Magnificent 7, index ETFs, international, crypto), each with a live
-    TradingView mini-chart. Pick a stake chip, a direction (UP/DOWN) and a
+    TradingView mini-chart. Tapping the row header *or* its chart opens the bet
+    drawer — the chart is a tap target, never a link out to TradingView. Pick a
+    stake chip, a direction (UP/DOWN) and a
     timeframe (1 min / 5 min / 1 hour). Bets resolve in the background — you can
     leave the screen and come back — and one bet per symbol is open at a time.
     Stocks are only bettable during their home exchange's trading hours.

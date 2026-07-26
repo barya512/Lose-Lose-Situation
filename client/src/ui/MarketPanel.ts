@@ -99,6 +99,13 @@ export function mountMarketPanel(onBack: () => void, effects: MarketPanelEffects
   const sectionsEl = el('div', 'display:flex;flex-direction:column;gap:24px;');
   wrap.append(statusEl, sectionsEl);
 
+  // Same reason as authForm: this is a DOM overlay over a live Phaser scene,
+  // and Phaser hit-tests window-level mouse events against whatever sits
+  // behind. Nothing interactive is back there today, but the chart hit-layer
+  // means chart clicks now reach `window` where the iframe used to eat them.
+  wrap.addEventListener('mousedown', (e) => e.stopPropagation());
+  wrap.addEventListener('mouseup', (e) => e.stopPropagation());
+
   document.body.append(wrap);
 
   // --- ticker rows -----------------------------------------------------
@@ -224,10 +231,20 @@ export function mountMarketPanel(onBack: () => void, effects: MarketPanelEffects
     const badgeEl = el('div', 'font-size:11px;padding:3px 8px;border-radius:6px;');
     headEl.append(nameEl, priceEl, badgeEl);
 
-    const chartEl = el('div', 'width:100%;height:160px;margin-top:10px;');
+    // The TradingView widget is a cross-origin iframe that links out to
+    // tradingview.com — a click inside it can't be intercepted, and used to
+    // take the player out of the game. A transparent layer on top swallows the
+    // click and toggles the betting drawer, same as the header. This makes the
+    // chart fully inert (their attribution stays visible but unclickable),
+    // which is fine: the chart is decorative, and any live gap left for it
+    // would just be a narrow band that still exits the game.
+    const chartWrapEl = el('div', 'position:relative;width:100%;height:160px;margin-top:10px;');
+    const chartEl = el('div', 'width:100%;height:100%;');
+    const chartHitEl = el('div', 'position:absolute;inset:0;cursor:pointer;');
+    chartWrapEl.append(chartEl, chartHitEl);
     const drawerEl = el('div', 'display:none;');
 
-    rowEl.append(headEl, chartEl, drawerEl);
+    rowEl.append(headEl, chartWrapEl, drawerEl);
     container.appendChild(rowEl);
 
     const row: RowState = {
@@ -236,6 +253,7 @@ export function mountMarketPanel(onBack: () => void, effects: MarketPanelEffects
       expanded: false,
     };
     headEl.addEventListener('click', () => toggleRow(row));
+    chartHitEl.addEventListener('click', () => toggleRow(row));
     return row;
   }
 
