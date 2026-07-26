@@ -29,15 +29,17 @@ envVarGroups:
 services:
   # --- RabbitMQ (private service with persistent disk) ---
   # Consumers read the user/pass back out of this service via fromService/envVarKey
-  # and combine them with the hostport to build the AMQP URL (see settings.py).
+  # and combine them with the bare host to build the AMQP URL (see settings.py).
+  # We deliberately do NOT set `port:`/reference `hostport` here: Render treats a
+  # declared port as an HTTP server port and probes it accordingly, which RabbitMQ
+  # (AMQP, not HTTP) rejects — and the derived `hostport` value has also proven to
+  # lag behind on dependent services. AMQP's port is a protocol constant (5672),
+  # so it's hardcoded client-side in settings.py instead of sourced from Render.
   - type: pserv
     name: lose-lose-rabbitmq
     runtime: image
     image:
       url: docker.io/library/rabbitmq:3-management
-    # Without this, Render's auto-detected `hostport` picks the image's first
-    # EXPOSEd port (4369, epmd) instead of the AMQP port aio_pika needs.
-    port: 5672
     plan: starter
     disk:
       name: rabbitmq-data
@@ -68,7 +70,7 @@ services:
         fromService:
           type: pserv
           name: lose-lose-rabbitmq
-          property: hostport
+          property: host
       - key: RABBITMQ_USER
         fromService:
           type: pserv
@@ -99,7 +101,7 @@ services:
         fromService:
           type: pserv
           name: lose-lose-rabbitmq
-          property: hostport
+          property: host
       - key: RABBITMQ_USER
         fromService:
           type: pserv
