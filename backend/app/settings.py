@@ -38,9 +38,10 @@ class Settings(BaseSettings):
 
     # --- Message broker (RabbitMQ) ---
     # Provide either a full RABBITMQ_URL (local/compose) OR the parts (Render, where the
-    # host comes from the private service's hostport and creds from the shared env group).
+    # bare host comes from the private service and creds from the shared env group).
     rabbitmq_url: str | None = Field(default="amqp://guest:guest@localhost:5672/")
-    rabbitmq_host: str | None = None  # e.g. "lose-lose-rabbitmq:5672" on Render
+    rabbitmq_host: str | None = None  # e.g. "lose-lose-rabbitmq" on Render (no port)
+    rabbitmq_port: int = 5672  # AMQP's standard port; not sourced from Render
     rabbitmq_user: str = "guest"
     rabbitmq_password: str = "guest"
 
@@ -71,7 +72,9 @@ class Settings(BaseSettings):
             # (e.g. "/"), which silently truncate the netloc if left raw.
             user = quote(self.rabbitmq_user, safe="")
             password = quote(self.rabbitmq_password, safe="")
-            self.rabbitmq_url = f"amqp://{user}:{password}@{self.rabbitmq_host}/"
+            self.rabbitmq_url = (
+                f"amqp://{user}:{password}@{self.rabbitmq_host}:{self.rabbitmq_port}/"
+            )
         return self
 
     @property
