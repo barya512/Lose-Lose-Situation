@@ -4,6 +4,10 @@ Base URL: `/api/v1`. Interactive docs at `/docs` (Swagger) when running.
 Auth is **JWT bearer** — send `Authorization: Bearer <token>`. All money is
 **integer cents**.
 
+> A bet's `status` is named from the **house's** point of view: `WON` means the
+> bet paid out, which grows the balance and is therefore the *bad* outcome for
+> the player. See [CONTEXT.md](../CONTEXT.md).
+
 ## Auth
 
 ### `POST /auth/guest`
@@ -33,11 +37,16 @@ Current wallet + active inventory.
 ## Market (Bet365)
 
 ### `GET /market/tickers`
-Curated set with live prices (a failed provider lookup returns `last_price: null`
-rather than failing the list).
+The 15 curated tickers with live prices, fetched concurrently. A failed provider
+lookup returns `last_price: null` rather than failing the list. `is_open` reports
+whether the ticker's **home exchange** is in its regular session — crypto is
+always open; stocks are gated to weekday local hours (NYSE, Euronext Amsterdam,
+LSE, ASX, HKEX). Bets on a closed ticker are rejected with 400.
 ```json
-→ 200 [ { "symbol": "AAPL", "name": "Apple", "kind": "STOCK", "last_price": 224.31 },
-        { "symbol": "BTC-USD", "name": "Bitcoin", "kind": "CRYPTO", "last_price": 61234.5 } ]
+→ 200 [ { "symbol": "AAPL", "name": "Apple", "kind": "STOCK",
+          "last_price": 224.31, "is_open": true },
+        { "symbol": "BTC-USD", "name": "Bitcoin", "kind": "CRYPTO",
+          "last_price": 61234.5, "is_open": true } ]
 ```
 
 ### `POST /market/bets`  *(auth)*
@@ -48,7 +57,8 @@ Place a timed UP/DOWN bet. Validated against `max_bet` and allowed timeframes
 → 201 { "id": "...", "ticker": "BTC-USD", "direction": "DOWN", "stake_cents": 5000,
         "start_price": 61234.5, "resolve_at": "...", "status": "PENDING", ... }
 ```
-Errors: 400 (validation — includes **one open bet per symbol**: a second bet on a
+Errors: 400 (validation — unknown ticker, **market closed**, bad timeframe, stake
+outside the allowed range, or **one open bet per symbol**: a second bet on a
 ticker you already have `PENDING` is rejected), 503 (market data unavailable).
 
 ### `GET /market/bets`  *(auth)*
@@ -73,6 +83,19 @@ penalty breakdown + any item drop (great for frontend juice).
 
 ## Casino (instant)
 
+### `GET /casino/slots/info`
+Public paytable — **no auth**. The client's slot info panel renders this rather
+than hardcoding the economy. `two_of_a_kind_disabled_reel_counts` lists the reel
+counts where a bare pair never pays (see the
+[formula cheatsheet](formula-cheatsheet.md#slots)).
+```json
+→ 200 { "min_reels": 3, "max_reels": 5,
+        "symbols": [ { "symbol": "CHERRY", "weight": 25.0, "three_of_a_kind_payout": 2.0 },
+                     { "symbol": "SKULL",  "weight": 9.0,  "three_of_a_kind_payout": 10.0 } ],
+        "two_of_a_kind_payout": 1.5,
+        "two_of_a_kind_disabled_reel_counts": [5] }
+```
+
 ### `POST /casino/roulette`  *(auth)*
 `selection` depends on `bet_type`: `COLOR`→"RED"/"BLACK", `EVENODD`→"EVEN"/"ODD",
 `DOZEN`/`COLUMN`→0|1|2, `STRAIGHT`→0..36, `GREEN`→null. The stake cap tightens as
@@ -91,7 +114,25 @@ the bet gets more specific.
                            "payout_cents": 0, "net_cents": -1000 } }
 ```
 
+`POST /casino/slots/spin` takes `reels` between 3 and 5 (default 3).
+
 Errors across casino: 400 (stake below min / above balance / above type cap).
+
+## Beer
+
+### `POST /beer/buy`  *(auth)*
+Buy and drink one beer: a fixed-price drain with no payout and no bet row. **No
+body.** The response carries the authoritative wallet, so the client merges it
+instead of re-reading `/me`.
+
+`cost_cents` is normally `ECON_BEER_COST_CENTS` ($1), but a wallet holding less
+than that pays **whatever is left** — the last-call rule, so the final beer can
+always finish a run at exactly $0.
+```json
+→ 200 { "cost_cents": 100, "balance_cents": 4300,
+        "total_lost_cents": 95700, "has_won": false }
+```
+Errors: 400 (insufficient funds — an empty wallet has nothing left to drink to).
 
 ## Meta
 

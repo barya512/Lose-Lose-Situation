@@ -1,10 +1,16 @@
 # GUI Polish — Poison Menu, Casino Cards, Slot Relayout & Win Juice
 
+> **Archived.** Implemented and partly superseded — the living reference for the
+> client's scenes and structure is
+> [client-architecture.md](../client-architecture.md). Note in particular that
+> **Market is no longer a coming-soon placeholder**; it shipped as a full scene.
+> Kept for the decision rationale below.
+
 **Date:** 2026-07-25 · **Status:** Implemented
 **Scope:** Client-only navigation layer + slot-screen relayout + a reusable win
 reaction. No backend changes. Engine/delivery inherited from
-[ADR 0003](adr/0003-frontend-engine.md); builds on the slots vertical slice in
-[the client-scaffold spec](superpowers/specs/2026-07-24-client-scaffold-slots-design.md).
+[ADR 0003](../adr/0003-frontend-engine.md); builds on the slots vertical slice in
+[the client-scaffold spec](2026-07-24-client-scaffold-slots-design.md).
 
 ## Context & goal
 
@@ -17,7 +23,7 @@ is the *celebrated* outcome and a `WON` spin (balance grew) is punished.
 
 All new art is **baked procedurally** in `client/src/core/assets.ts` (same
 `generateTexture` convention as the existing placeholders) so every screen works
-today; real assets are tracked in [asset-list.md](asset-list.md) for later swap-in
+today; real assets are tracked in [asset-list.md](../asset-list.md) for later swap-in
 by key. Market / Blackjack / Roulette are **coming-soon placeholders** (styled,
 disabled, toast on tap) — only Casino→Slots and Beer are interactive.
 
@@ -70,7 +76,7 @@ resized in `SlotsScene.buildReels()`.
 - **Coming soon:** Market (orb) and Roulette/Blackjack (cards) are rendered fully
   styled but disabled, with a toast on tap. Only Casino→Slots and Beer act.
 - **Procedural art:** every new visual is baked in `assets.ts` (`bakeUiTextures`);
-  real art drops in by key. See [asset-list.md](asset-list.md) for the appended
+  real art drops in by key. See [asset-list.md](../asset-list.md) for the appended
   rows (orb + icons, cards + art, beer states, nine-slice frame, lever, reaction
   frames, beer SFX).
 

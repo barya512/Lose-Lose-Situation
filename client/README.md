@@ -1,39 +1,16 @@
 # Lose-Lose — Client
 
-Phaser 3 + Vite + TypeScript HTML5 client. Slots vertical slice.
-
-## Dev
+Phaser 3 + Vite + TypeScript HTML5 client. The game is **inverted**: reaching $0
+wins, so a wager that drains money is the celebrated outcome.
 
 ```bash
 npm install
-npm run dev        # http://localhost:5173
+npm run dev        # http://localhost:5173 — needs the backend running
+npm run test       # vitest
+npm run build      # -> dist/, ready to zip for itch.io
 ```
 
-Requires the backend running (`make up-local && make migrate && make seed` from
-the repo root) with `CORS_ORIGINS` including `http://localhost:5173`.
-Backend URL is set by `VITE_API_BASE` in `.env.development`.
-
-## Test
-
-```bash
-npm run test       # Vitest — core/session + core/api
-```
-
-## Build (itch HTML5)
-
-```bash
-npm run build      # -> dist/ (base: './', index.html at root)
-```
-Zip the **contents** of `dist/` (with `index.html` at the zip root) and upload as
-an itch.io HTML5 project. Set `VITE_API_BASE` in `.env.production` to the Render
-URL before building for release.
-
-## Structure
-
-- `src/core/` — `api` (typed fetch), `session` (wallet store + win gate),
-  `assets` (placeholder manifest), `audio`, `juice`.
-- `src/ui/` — `Button`, `WalletHud`, `authForm`.
-- `src/scenes/` — Boot → Title → Menu → Slots, plus the module-agnostic Win.
-
-Real art/audio swaps in by replacing entries in `src/core/assets.ts` /
-`src/core/audio.ts` — no scene changes needed.
+Full setup, play-through and build instructions:
+**[docs/getting-started.md](../docs/getting-started.md)**.
+How this client is structured (scenes, theme tokens, module map, art pipeline):
+**[docs/client-architecture.md](../docs/client-architecture.md)**.

@@ -1,9 +1,24 @@
-# Architecture
+# Backend Architecture
 
 A **modular monolith + one async worker**. Each game module is an isolated
 package (`app/modules/<name>`) with its own router + service + schemas, so the
 code reads like microservices and could be split later, but ships as one
-deployable.
+deployable ([ADR 0001](adr/0001-modular-monolith.md)).
+
+The client is a separate Phaser app that talks to this over REST — its structure
+is documented in [client-architecture.md](client-architecture.md).
+
+## Modules
+
+| Module | Resolution | What |
+|--------|-----------|------|
+| `market` | **async** — worker | Timed UP/DOWN bets on real yfinance prices; dynamic penalty stack, item drops |
+| `casino` | instant | Slots (3–5 reels) and roulette |
+| `beer` | instant | A fixed-price drain with no payout — no bet row, no chance of gaining |
+| `polls`, `sports` | — | Stretch. Schema present, no code yet. |
+
+Everything is mounted under `/api/v1` by `app/main.py` → `app/api/v1/`; see the
+[API reference](api-reference.md).
 
 ## Services
 

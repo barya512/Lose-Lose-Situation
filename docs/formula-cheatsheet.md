@@ -22,6 +22,12 @@ Render env group (prod), or in your shell.
 | `ECON_MAX_BET_FRACTION` | `0.25` | A single bet may stake at most this fraction of balance ($Y). |
 | `ECON_MIN_BET_CENTS` | `100` ($1) | Smallest allowed stake — except at **last call** (below). |
 
+## Beer
+
+| Env var | Default | Meaning |
+|---------|---------|---------|
+| `ECON_BEER_COST_CENTS` | `100` ($1) | Price of one beer — a pure drain with no payout, no bet, no chance of gaining. The cheapest way to shed money. |
+
 **Last call.** A wallet holding *less* than `ECON_MIN_BET_CENTS` but more than $0
 (say `$0.43`) would be softlocked: too poor to bet, not yet at the $0 win. Below
 the minimum, the whole remaining balance becomes the **only** legal stake — one
@@ -35,6 +41,12 @@ and the normal minimum applies again.
 |---------|---------|---------|
 | `ECON_WIN_MULTIPLIER` | `2.0` | A win doubles the stake (balance grows — bad). |
 | `ECON_BASE_LOSS_PENALTY` | `0.10` | Extra % of the stake skimmed on a loss, before the stack below. |
+
+**Trading hours.** The 15 curated tickers each declare a home exchange
+(`CURATED_TICKERS` / `MarketHours`, edited in code). Stocks only accept bets
+Mon–Fri during their exchange's local regular session; crypto is always open.
+`GET /market/tickers` reports this as `is_open`, and a bet on a closed ticker is
+rejected. No holiday calendar — weekday + clock time only.
 
 ## Dynamic penalty stack (multipliers on the base loss)
 
@@ -70,19 +82,37 @@ Rarity weights (`ITEM_RARITY_WEIGHTS`) and the item catalog
 | `ECON_ROULETTE_LIMIT_GREEN` | `0.20` | the single 0 |
 | `ECON_ROULETTE_LIMIT_STRAIGHT` | `0.10` | exact number (tightest) |
 
-Payouts: `ECON_ROULETTE_PAYOUT_COLOR` (2.0), `_DOZEN` (3.0), `_GREEN` (36.0),
-`_STRAIGHT` (36.0) — the total returned = stake × payout on a hit.
+Payouts — the total returned on a hit = stake × payout. Note there are only four
+knobs for six bet types: even/odd shares the colour payout, and column shares the
+dozen payout.
+
+| Env var | Default | Applies to |
+|---------|---------|------------|
+| `ECON_ROULETTE_PAYOUT_COLOR` | `2.0` | red/black **and** even/odd |
+| `ECON_ROULETTE_PAYOUT_DOZEN` | `3.0` | dozen **and** column |
+| `ECON_ROULETTE_PAYOUT_GREEN` | `36.0` | the single 0 |
+| `ECON_ROULETTE_PAYOUT_STRAIGHT` | `36.0` | exact number |
 
 ## Slots
 
-Reel symbol weights (`SLOT_REEL_WEIGHTS`) and three-of-a-kind payouts
-(`SLOT_THREE_OF_A_KIND_PAYOUT`) are edited in code. `SLOT_TWO_OF_A_KIND_PAYOUT`
-(1.5) only pays for symbols in `SLOT_PAIR_ELIGIBLE_SYMBOLS` (CHERRY/LEMON) —
-a pair of anything else is a near-miss loss, not a payout. This keeps the
-punish-rate (any-payout spin) around 30% on both 3 and 5 reels; letting any
-symbol pair pay would put a floor of ~44% on 3 reels no matter how the
-weights are tuned (birthday paradox with only 6 symbols). `SKULL`/`SEVEN` are
-the rare jackpot tier (pays the most = worst for the player).
+Reel count is player-chosen, `SLOT_MIN_REELS` (3) to `SLOT_MAX_REELS` (5). Reel
+symbol weights (`SLOT_REEL_WEIGHTS`) and three-of-a-kind payouts
+(`SLOT_THREE_OF_A_KIND_PAYOUT`) are edited in code, and the whole paytable is
+served to the client by `GET /casino/slots/info`.
+
+Two rules keep pairs from flooding the player with money:
+
+- `SLOT_TWO_OF_A_KIND_PAYOUT` (1.5) only pays for symbols in
+  `SLOT_PAIR_ELIGIBLE_SYMBOLS` (CHERRY/LEMON) — a pair of anything else is a
+  near-miss loss, not a payout. Letting any symbol pair pay would put a floor of
+  ~44% on the punish-rate at 3 reels no matter how the weights are tuned
+  (birthday paradox with only 6 symbols).
+- `SLOT_TWO_OF_A_KIND_DISABLED_REEL_COUNTS` (`{5}`) drops pair payouts entirely
+  at **5 reels**, where even an eligible pair is near-guaranteed.
+
+Together these hold the punish-rate (any-payout spin) around 30% on both 3 and 5
+reels. `SKULL`/`SEVEN` are the rare jackpot tier — pays the most, so worst for
+the player.
 
 ## Balancing harness
 

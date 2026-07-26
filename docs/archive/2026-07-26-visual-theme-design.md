@@ -1,9 +1,13 @@
 # Visual Theme — Casino Felt / Balatro
 
+> **Archived.** Implemented and superseded — the living reference for the client's
+> look is [client-architecture.md](../client-architecture.md). Kept for the
+> decision rationale below.
+
 **Date:** 2026-07-26 · **Status:** Implemented
 **Scope:** Client-only. Palette, type, screen-edge chrome, and the layout of the
 poison and casino screens. No backend changes, no gameplay changes. Builds on the
-navigation layer from [gui-polish-design.md](gui-polish-design.md).
+navigation layer from [2026-07-25-gui-polish-design.md](2026-07-25-gui-polish-design.md).
 
 ## Context & goal
 
@@ -36,7 +40,7 @@ Settled one-by-one in a grilling session before implementation.
 | 10 | Orb sizes | **Hand-tuned** radius + vertical offset per bet, in one table in `PoisonScene` | Deterministic and re-tunable; market sits biggest and lowest as the centrepiece | Size derived from stake weight (no number to bind to); randomised per visit |
 | 11 | Orb labels | **Hidden when idle**; hover fades in name + description, rising into place | An idle table is just glowing orbs; hovering is what tells you what the bet is | Names always visible; a Balatro tooltip card |
 | 12 | Cards | Worn cream stock, ink border, **corner suit indices**, ink emblem, name **below** the card | "More card like, worn-out white" | Name printed on the face; full rank-and-suit playing-card faces |
-| 13 | Art pipeline | Procedural still, but baked via **canvas 2D** | `Graphics` has no gradients, and this palette is built on them — [ADR 0005](adr/0005-canvas-baked-token-driven-theme.md) | Hand-authored PNGs; flat `Graphics` fills |
+| 13 | Art pipeline | Procedural still, but baked via **canvas 2D** | `Graphics` has no gradients, and this palette is built on them — [ADR 0005](../adr/0005-canvas-baked-token-driven-theme.md) | Hand-authored PNGs; flat `Graphics` fills |
 | 14 | Copy | **Unchanged** (only `lost so far` removed) | Machine names stay honest to what the backend actually serves | Adopt the mockups' wording, incl. renaming ROULETTE → POKER |
 | 15 | Money format | **`$` with cents kept** | Reaching exactly `$0` is the win condition, so `$0.40` must never render as `$0` — that reads as a broken game | Drop the decimals; switch to `₪` |
 | 16 | Hover state | **Gold-rim texture swap + 3% lift**, never a tint | A tint multiplies; on cream and gold surfaces that reads as dirt, not highlight | Warm near-white tint |
@@ -72,7 +76,7 @@ ui/BackTab.ts      the bottom-left flush tab, a Button with edge-chrome textures
 
 `Button` grew `texture` / `hoverTexture` / `lift` options, which is what lets
 `BackTab` be a differently-shaped Button rather than a fourth copy of the widget
-input wiring ([ADR 0004](adr/0004-click-requires-matching-press.md) still governs
+input wiring ([ADR 0004](../adr/0004-click-requires-matching-press.md) still governs
 what counts as a click).
 
 `Orb`'s hit area also changed from a square to a **circle**. It was always

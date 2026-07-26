@@ -1,5 +1,9 @@
 # Client Scaffold + Slots Slice — Implementation Plan
 
+> **Archived.** Every task below was executed; the checkboxes are a historical
+> record, **not work to pick up**. The living reference for the client is
+> [client-architecture.md](../client-architecture.md).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Stand up a `/client` (Vite + Phaser 3 + TypeScript) and ship a
@@ -33,7 +37,7 @@ re-reads `GET /me`; the win condition ($0) is detected once, centrally, in
   `http://localhost:5173`. This is a `.env` setting on the backend, not a code
   change here.
 
-Spec: [docs/superpowers/specs/2026-07-24-client-scaffold-slots-design.md](../specs/2026-07-24-client-scaffold-slots-design.md).
+Spec: [2026-07-24-client-scaffold-slots-design.md](2026-07-24-client-scaffold-slots-design.md).
 
 ---
 

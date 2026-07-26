@@ -5,7 +5,8 @@
 ## Context
 
 The client's whole look was retuned from a purple/pink neon skin to a green
-casino felt table (see [visual-theme-design.md](../visual-theme-design.md)). Two
+casino felt table (see
+[archive/2026-07-26-visual-theme-design.md](../archive/2026-07-26-visual-theme-design.md)). Two
 implementation decisions in that change look odd on first reading and are
 expensive to reverse once every screen depends on them.
 

@@ -1,10 +1,15 @@
 # Client Scaffold + Slots Slice — Design
 
+> **Archived.** Fully implemented — the living reference for the client is
+> [client-architecture.md](../client-architecture.md). Kept for the design
+> rationale below. The paired execution plan is
+> [2026-07-24-client-scaffold-slots-plan.md](2026-07-24-client-scaffold-slots-plan.md).
+
 **Date:** 2026-07-24 · **Status:** Approved (pending spec review)
 **Scope:** Roadmap Phase 4, "Next actions" 1–2 — stand up `/client` and ship a
 submittable slots vertical slice. Market and roulette are out of scope (separate
 specs). Engine and delivery decisions are inherited from
-[ADR 0003](../../adr/0003-frontend-engine.md) and are not re-litigated here.
+[ADR 0003](../adr/0003-frontend-engine.md) and are not re-litigated here.
 
 ## Goal
 

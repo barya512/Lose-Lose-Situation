@@ -4,11 +4,13 @@
 cream chrome, worn playing-card stock, and a display serif paired with a wide
 letterspaced sans. Deliberate glitch artifacts when money is *gained* (leans into
 the inverted theme). Palette and type live in
-[`client/src/core/theme.ts`](../client/src/core/theme.ts); see
-[visual-theme-design.md](visual-theme-design.md). Source files go in
-[`/assets`](../assets).
+[`client/src/core/theme.ts`](../client/src/core/theme.ts); the token contract is
+described in [client-architecture.md](client-architecture.md#theme-tokens) and
+the decisions behind the look in
+[archive/2026-07-26-visual-theme-design.md](archive/2026-07-26-visual-theme-design.md).
+Source files go in [`/assets`](../assets).
 
-Every visual below is currently **baked procedurally** at boot in
+Unless ticked, a visual below is **baked procedurally** at boot in
 [`client/src/core/assets.ts`](../client/src/core/assets.ts) and swappable by
 texture key — the checkboxes track real hand-authored art replacing a bake.
 
@@ -16,7 +18,7 @@ texture key — the checkboxes track real hand-authored art replacing a bake.
 
 | Asset | Spec | Status |
 |-------|------|:---:|
-| Slot reel symbols (CHERRY, LEMON, BELL, STAR, SEVEN, SKULL) | 128×128 PNG, transparent, atlas-packed | ☐ |
+| Slot reel symbols (CHERRY, LEMON, BELL, STAR, SEVEN, SKULL) | 128×128 PNG, transparent | ☑ `assets/{CHERRY,LEMON,BELL,STAR,SEVEN,SKULL}.png`, drawn over baked backing plates |
 | Slot machine frame + lever | 1080×1080; lever 4–6 frame anim | ☐ |
 | Roulette wheel + ball | wheel 720×720 (rotatable), ball 32×32 | ☐ |
 | Item cards/icons (per catalog `art_key`) | card 300×420, icon 96×96, rarity-framed | ☐ |
@@ -42,11 +44,11 @@ texture key — the checkboxes track real hand-authored art replacing a bake.
 
 ## Fonts
 
-Self-hosted, latin subset, SIL Open Font License. Declared in
+Self-hosted, latin subset, SIL Open Font License — **shipped**. Declared in
 [`client/src/styles/fonts.css`](../client/src/styles/fonts.css) and awaited by
 `BootScene` before the first scene draws (see
-[ADR 0005](adr/0005-canvas-baked-token-driven-theme.md)). Bake sizes are given in
-authored 720p units; the canvas underneath is twice that
+[ADR 0005](adr/0005-canvas-baked-token-driven-theme.md)). Bake sizes above are
+given in authored 720p units; the canvas underneath is twice that
 ([ADR 0006](adr/0006-2x-render-scale.md)).
 
 | File | Family / axis | Used for |
@@ -69,7 +71,9 @@ Item `art_key`s already referenced by the seed catalog: `item_leaky_wallet`,
 | Item drop jingle (per rarity) | escalating sparkle | ☐ |
 | Beer sip/gulp SFX | short, wet — plays on beer buy | ☐ |
 | Opening cutscene track | intro narrative bed | ☐ |
-| BGM loops (menu, market, casino) | seamless ~60–120s | ☐ |
+| Main theme loop | seamless bed under play | ☑ `assets/sounds/Loose Loose Loop.mp3` |
+| Win-screen stinger | payoff for reaching $0 | ☑ `assets/sounds/Cursed Sandman.mp3` |
+| Per-screen BGM (menu / market / casino) | seamless ~60–120s, if the one bed isn't enough | ☐ |
 
 ## Boot sequence
 
