@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 from typing import Literal
+from urllib.parse import quote
 
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -66,9 +67,11 @@ class Settings(BaseSettings):
         # When a host is provided (Render path), build the AMQP URL from parts so it
         # always wins over the localhost default that RABBITMQ_URL falls back to.
         if self.rabbitmq_host:
-            self.rabbitmq_url = (
-                f"amqp://{self.rabbitmq_user}:{self.rabbitmq_password}@{self.rabbitmq_host}/"
-            )
+            # Render-generated credentials can contain URL-reserved characters
+            # (e.g. "/"), which silently truncate the netloc if left raw.
+            user = quote(self.rabbitmq_user, safe="")
+            password = quote(self.rabbitmq_password, safe="")
+            self.rabbitmq_url = f"amqp://{user}:{password}@{self.rabbitmq_host}/"
         return self
 
     @property
